@@ -10,6 +10,8 @@
 #include <linux/binfmts.h>
 #include <linux/sched/idle.h>
 
+unsigned long get_wchan_nr(struct task_struct *p, int nr);
+
 /*
  * Tracepoint for calling kthread_stop, performed to end a kthread:
  */
@@ -609,16 +611,38 @@ TRACE_EVENT(sched_blocked_reason,
 	TP_STRUCT__entry(
 		__field( pid_t,	pid	)
 		__field( void*, caller	)
+		__field(void*, caller1)
+		__field(void*, caller2)
+		__field(void*, caller3)
+		__field(void*, caller4)
+		__field(void*, caller5)
+		__field(void*, caller6)
+		__field(void*, caller7)
+		__field(void*, caller8)
+		__field(void*, caller9)
 		__field( bool, io_wait	)
 	),
 
 	TP_fast_assign(
 		__entry->pid	= tsk->pid;
 		__entry->caller = (void*)get_wchan(tsk);
+		__entry->caller1 = (void *)get_wchan_nr(tsk, 1);
+		__entry->caller2 = (void *)get_wchan_nr(tsk, 2);
+		__entry->caller3 = (void *)get_wchan_nr(tsk, 3);
+		__entry->caller4 = (void *)get_wchan_nr(tsk, 4);
+		__entry->caller5 = (void *)get_wchan_nr(tsk, 5);
+		__entry->caller6 = (void *)get_wchan_nr(tsk, 6);
+		__entry->caller7 = (void *)get_wchan_nr(tsk, 7);
+		__entry->caller8 = (void *)get_wchan_nr(tsk, 8);
+		__entry->caller9 = (void *)get_wchan_nr(tsk, 9);
 		__entry->io_wait = tsk->in_iowait;
 	),
 
-	TP_printk("pid=%d iowait=%d caller=%pS", __entry->pid, __entry->io_wait, __entry->caller)
+	TP_printk("pid=%d iowait=%d caller=%pS%pS%pS%pS%pS%pS%pS%pS%pS%pS", __entry->pid, __entry->io_wait,
+		  (void *)__entry->caller, (void *)__entry->caller1, (void *)__entry->caller2,
+		  (void *)__entry->caller3, (void *)__entry->caller4, (void *)__entry->caller5,
+		  (void *)__entry->caller6, (void *)__entry->caller7, (void *)__entry->caller8,
+		  (void *)__entry->caller9)
 );
 
 /*

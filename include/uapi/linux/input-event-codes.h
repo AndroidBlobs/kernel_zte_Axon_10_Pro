@@ -337,6 +337,11 @@
 
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
 
+/* add start by jiangchong for Hall sensor driver,20141212*/
+#define KEY_HALL_SENSOR_DOWN	249
+#define KEY_HALL_SENSOR_UP	 250
+/* add end by jiangchong for Hall sensor driver,20141212*/
+
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
 #define BTN_MISC		0x100
@@ -645,6 +650,25 @@
 #define KEY_DATA			0x277
 #define KEY_ONSCREEN_KEYBOARD		0x278
 
+
+/* add by wangkuihua for touch gesture begin */
+#define KEY_GESTURE_DOUBLEC		0x2a0
+#define KEY_GESTURE_L			0x2a1
+#define KEY_GESTURE_DOWN		0x2a2
+#define KEY_GESTURE_U			0x2a3
+#define KEY_GESTURE_UP			0x2a4
+#define KEY_GESTURE_C			0x2a5
+#define KEY_GESTURE_E			0x2a6
+#define KEY_GESTURE_M			0x2a7
+#define KEY_GESTURE_LEFT		0x2a8
+#define KEY_GESTURE_RIGHT		0x2a9
+#define KEY_GESTURE_S			0x2aa
+#define KEY_GESTURE_W			0x2ab
+#define KEY_GESTURE_V			0x2ac
+#define KEY_GESTURE_O			0x2ad
+#define KEY_GESTURE_Z			0x2ae
+/* add by wangkuihua for touch gesture end */
+
 #define BTN_TRIGGER_HAPPY		0x2c0
 #define BTN_TRIGGER_HAPPY1		0x2c0
 #define BTN_TRIGGER_HAPPY2		0x2c1
@@ -694,7 +718,11 @@
 #define KEY_FP_GESTURE_RIGHT		0x2eb
 #define KEY_FP_GESTURE_LONG_PRESS	0x2ec
 #define KEY_FP_GESTURE_TAP		0x2ed
-
+/*add start by rzl for undercell fp*/
+#define KEY_PRESSURE	0x2ee
+#define KEY_AREAMEET_UP			0x2ef
+#define KEY_AOD_AREAMEET_DOWN	0x2f0
+/*add end by rzl for undercell fp*/
 /* We avoid low common keys in module aliases so they don't get huge. */
 #define KEY_MIN_INTERESTING	KEY_MUTE
 #define KEY_MAX			0x2ff

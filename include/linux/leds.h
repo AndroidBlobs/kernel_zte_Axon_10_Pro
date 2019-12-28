@@ -373,6 +373,9 @@ struct led_info {
 	const char	*name;
 	const char	*default_trigger;
 	int		flags;
+#ifdef CONFIG_LEDS_AW9106B
+	void	*data;
+#endif
 };
 
 struct led_platform_data {
@@ -445,6 +448,9 @@ extern void led_classdev_notify_brightness_hw_changed(
 #else
 static inline void led_classdev_notify_brightness_hw_changed(
 	struct led_classdev *led_cdev, enum led_brightness brightness) { }
+#endif
+#ifdef CONFIG_LEDS_AW9106B
+extern int __init led_aw9106_device_init(void);
 #endif
 
 #endif		/* __LINUX_LEDS_H_INCLUDED */
