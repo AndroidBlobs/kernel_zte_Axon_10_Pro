@@ -34,6 +34,10 @@
 #define FSA4480_DELAY_L_AGND    0x10
 #define FSA4480_RESET           0x1E
 
+/* ZTE_chenjun */
+#define I2C_RETRY_ATTEMPTS 5
+#define I2C_RETRY_MSLEEP 50
+
 struct fsa4480_priv {
 	struct regmap *regmap;
 	struct device *dev;
@@ -69,19 +73,62 @@ static const struct fsa4480_reg_val fsa_reg_i2c_defaults[] = {
 	{FSA4480_SWITCH_SETTINGS, 0x98},
 };
 
-static void fsa4480_usbc_update_settings(struct fsa4480_priv *fsa_priv,
-		u32 switch_control, u32 switch_enable)
+/* ZTE_chenjun */
+static void fsa4480_reg_rw_retry(struct fsa4480_priv *fsa_priv,
+		unsigned int reg, unsigned int val, unsigned int *r_val_ptr)
 {
+	int ret = 0;
+	int retry = 0;
+
 	if (!fsa_priv->regmap) {
 		dev_err(fsa_priv->dev, "%s: regmap invalid\n", __func__);
 		return;
 	}
 
-	regmap_write(fsa_priv->regmap, FSA4480_SWITCH_SETTINGS, 0x80);
-	regmap_write(fsa_priv->regmap, FSA4480_SWITCH_CONTROL, switch_control);
+	do {
+		msleep(I2C_RETRY_MSLEEP);
+		if (r_val_ptr) {
+			ret = regmap_read(fsa_priv->regmap, reg, r_val_ptr);
+		} else {
+			ret = regmap_write(fsa_priv->regmap, reg, val);
+		}
+		retry++;
+	} while (ret && (retry < I2C_RETRY_ATTEMPTS));
+
+	if (!ret) {
+		pr_info("%s: %s retry %d successful\n", __func__, (r_val_ptr ? "read" : "write"), retry);
+	} else {
+		pr_err("%s: %s retry %d fail %d\n", __func__, (r_val_ptr ? "read" : "write"), retry, ret);
+	}
+}
+
+static void fsa4480_usbc_update_settings(struct fsa4480_priv *fsa_priv,
+		u32 switch_control, u32 switch_enable)
+{
+	int ret = 0;
+
+	if (!fsa_priv->regmap) {
+		dev_err(fsa_priv->dev, "%s: regmap invalid\n", __func__);
+		return;
+	}
+
+	/* ZTE_chenjun */
+	ret = regmap_write(fsa_priv->regmap, FSA4480_SWITCH_SETTINGS, 0x80);
+	if (ret) {
+		fsa4480_reg_rw_retry(fsa_priv, FSA4480_SWITCH_SETTINGS, 0x80, NULL);
+	}
+
+	ret = regmap_write(fsa_priv->regmap, FSA4480_SWITCH_CONTROL, switch_control);
+	if (ret) {
+		fsa4480_reg_rw_retry(fsa_priv, FSA4480_SWITCH_CONTROL, switch_control, NULL);
+	}
+
 	/* FSA4480 chip hardware requirement */
 	usleep_range(50, 55);
-	regmap_write(fsa_priv->regmap, FSA4480_SWITCH_SETTINGS, switch_enable);
+	ret = regmap_write(fsa_priv->regmap, FSA4480_SWITCH_SETTINGS, switch_enable);
+	if (ret) {
+		fsa4480_reg_rw_retry(fsa_priv, FSA4480_SWITCH_SETTINGS, switch_enable, NULL);
+	}
 }
 
 static int fsa4480_usbc_event_changed(struct notifier_block *nb,
@@ -112,7 +159,8 @@ static int fsa4480_usbc_event_changed(struct notifier_block *nb,
 		return ret;
 	}
 
-	dev_dbg(dev, "%s: USB change event received, supply mode %d, usbc mode %d, expected %d\n",
+/* ZTE_chenjun */
+	dev_info(dev, "%s: USB change event received, supply mode %d, usbc mode %d, expected %d\n",
 		__func__, mode.intval, fsa_priv->usbc_mode.counter,
 		POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER);
 
@@ -155,7 +203,8 @@ static int fsa4480_usbc_analog_setup_switches(struct fsa4480_priv *fsa_priv)
 			__func__, rc);
 		goto done;
 	}
-	dev_dbg(dev, "%s: setting GPIOs active = %d\n",
+	/* ZTE_chenjun */
+	dev_info(dev, "%s: setting GPIOs active = %d\n",
 		__func__, mode.intval != POWER_SUPPLY_TYPEC_NONE);
 
 	switch (mode.intval) {
@@ -212,6 +261,11 @@ int fsa4480_reg_notifier(struct notifier_block *nb,
 				(&fsa_priv->fsa4480_notifier, nb);
 	if (rc)
 		return rc;
+
+	/*
+	 * ZTE_chengc,fix the problem:when power on with headset,phone doesn't show headset icon
+	 */
+	atomic_set(&(fsa_priv->usbc_mode), POWER_SUPPLY_TYPEC_NONE);
 
 	/*
 	 * as part of the init sequence check if there is a connected
@@ -280,6 +334,10 @@ int fsa4480_switch_event(struct device_node *node,
 	int switch_control = 0;
 	struct i2c_client *client = of_find_i2c_device_by_node(node);
 	struct fsa4480_priv *fsa_priv;
+	int ret = 0;
+
+/* ZTE_chenjun */
+	pr_info("%s: event %d\n", __func__, event);
 
 	if (!client)
 		return -EINVAL;
@@ -292,8 +350,12 @@ int fsa4480_switch_event(struct device_node *node,
 
 	switch (event) {
 	case FSA_MIC_GND_SWAP:
-		regmap_read(fsa_priv->regmap, FSA4480_SWITCH_CONTROL,
+		/* ZTE_chenjun */
+		ret = regmap_read(fsa_priv->regmap, FSA4480_SWITCH_CONTROL,
 				&switch_control);
+		if (ret) {
+			fsa4480_reg_rw_retry(fsa_priv, FSA4480_SWITCH_CONTROL, 0, &switch_control);
+		}
 		if ((switch_control & 0x07) == 0x07)
 			switch_control = 0x0;
 		else
