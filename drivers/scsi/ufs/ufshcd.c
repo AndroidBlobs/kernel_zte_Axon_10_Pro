@@ -4629,6 +4629,15 @@ int ufshcd_read_device_desc(struct ufs_hba *hba, u8 *buf, u32 size)
 	return ufshcd_read_desc(hba, QUERY_DESC_IDN_DEVICE, 0, buf, size);
 }
 
+int ufshcd_read_geometry_desc(struct ufs_hba *hba, u8 *buf, u32 size)
+{
+	return ufshcd_read_desc(hba, QUERY_DESC_IDN_GEOMETRY, 0, buf, size);
+}
+
+int ufshcd_read_health_desc(struct ufs_hba *hba, u8 *buf, u32 size)
+{
+	return ufshcd_read_desc(hba, QUERY_DESC_IDN_RFU_2, 0, buf, size);
+}
 /**
  * ufshcd_read_string_desc - read string descriptor
  * @hba: pointer to adapter instance
@@ -7702,6 +7711,7 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 	    (lrbp->lun == UFS_UPIU_RPMB_WLUN))
 		return ufshcd_eh_host_reset_handler(cmd);
 
+
 	ufshcd_hold_all(hba);
 	reg = ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
 	/* If command is already aborted/completed, return SUCCESS */
@@ -8688,6 +8698,33 @@ out:
 	return err;
 }
 
+static u64 ufshcd_get_device_capacity(struct scsi_device *sdev)
+{
+	struct ufs_hba *hba = shost_priv(sdev->host);
+	int err;
+	u8 desc_buf[QUERY_DESC_GEOMETRY_DEF_SIZE];
+	u64 device_capacity_512;
+
+	if (!hba)
+		return 0;
+
+	pm_runtime_get_sync(hba->dev);
+	err = ufshcd_read_geometry_desc(hba, desc_buf,
+					QUERY_DESC_GEOMETRY_DEF_SIZE);
+	if (err) {
+	    dev_err(hba->dev, "%s: ufshcd_read_geometry_desc() failed!err =%d\n", __func__, err);
+	    device_capacity_512 = 0;
+	} else
+	    device_capacity_512 = ((u64)desc_buf[4] << 56 | (u64)desc_buf[5] <<  48 |
+				(u64)desc_buf[6] << 40 | (u64)desc_buf[7] << 32 |
+				(u64)desc_buf[8] << 24 | (u64)desc_buf[9] << 16 |
+				(u64)desc_buf[10] << 8 | (u64)desc_buf[11] << 0);
+
+	pm_runtime_put_sync(hba->dev);
+
+	return device_capacity_512;
+}
+
 /**
  * ufshcd_is_g4_supported - check if device supports HS-G4
  * @hba: per-adapter instance
@@ -9350,6 +9387,7 @@ static struct scsi_host_template ufshcd_driver_template = {
 	.eh_host_reset_handler   = ufshcd_eh_host_reset_handler,
 	.eh_timed_out		= ufshcd_eh_timed_out,
 	.ioctl			= ufshcd_ioctl,
+	.device_capacity	= ufshcd_get_device_capacity,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl		= ufshcd_ioctl,
 #endif
