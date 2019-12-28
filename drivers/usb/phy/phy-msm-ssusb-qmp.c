@@ -738,7 +738,10 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 		hrtimer_cancel(&phy->timer);
 		msm_ssphy_qmp_enable_clks(phy, false);
 		phy->in_suspend = true;
-		msm_ssphy_power_enable(phy, 0);
+		/* Turn off pd phy power only if DP not connected */
+		if (!(phy->phy.flags & PHY_USB_DP_CONCURRENT_MODE)) {
+			msm_ssphy_power_enable(phy, 0);
+		}
 		dev_dbg(uphy->dev, "QMP PHY is suspend\n");
 	} else {
 		msm_ssphy_power_enable(phy, 1);
@@ -900,6 +903,7 @@ static int msm_ssphy_qmp_dp_notifier(struct notifier_block *nb,
 	else
 		phy->phy.flags &= ~PHY_USB_DP_CONCURRENT_MODE;
 
+	pr_debug("%s, dp_lane:%lu", __func__, dp_lane);
 	return 0;
 
 }

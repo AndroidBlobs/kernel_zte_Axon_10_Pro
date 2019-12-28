@@ -19,6 +19,7 @@
 
 /* Registers Address */
 #define GEN_DEV_SET_REG			0x00
+#define AUX_CHANNEL_CONTROL	0x09
 #define CHIP_VERSION_REG		0x17
 
 #define REDRIVER_REG_MAX		0x1f
@@ -534,6 +535,7 @@ static int ssusb_redriver_extcon_register(struct ssusb_redriver *redriver)
 				"failed to register blocking notifier\n");
 			goto err1;
 		}
+		dev_info(redriver->dev, "success register notifier for displayport\n");
 	}
 
 	/* Update initial VBUS/ID state from extcon */
@@ -775,6 +777,7 @@ static int redriver_i2c_probe(struct i2c_client *client,
 	union power_supply_propval pval = {0};
 	int ret;
 
+	pr_info("USB 3.1 Gen1/Gen2 Re-Driver Probe enter\n");
 	redriver = devm_kzalloc(&client->dev, sizeof(struct ssusb_redriver),
 			GFP_KERNEL);
 	if (!redriver)
@@ -838,7 +841,7 @@ static int redriver_i2c_probe(struct i2c_client *client,
 
 	ssusb_redriver_debugfs_entries(redriver);
 
-	dev_dbg(&client->dev, "USB 3.1 Gen1/Gen2 Re-Driver Probed.\n");
+	dev_info(&client->dev, "USB 3.1 Gen1/Gen2 Re-Driver Probed.\n");
 
 	return 0;
 
@@ -1185,6 +1188,47 @@ static void redriver_i2c_shutdown(struct i2c_client *client)
 			"%s: successfully set back to USB mode.\n",
 			__func__);
 }
+
+int ssusb_redriver_aux_switch(struct device_node *node, int event)
+{
+	int ret;
+	u8 val;
+	struct i2c_client *client = of_find_i2c_device_by_node(node);
+	struct ssusb_redriver *redriver;
+
+	if (!client) {
+		dev_err(&client->dev, "%s: invalid client\n", __func__);
+		return -EINVAL;
+	}
+
+	redriver = (struct ssusb_redriver *)i2c_get_clientdata(client);
+	if (!redriver) {
+		dev_err(&client->dev, "%s: invalid redriver\n", __func__);
+		return -EINVAL;
+	}
+
+	switch (event) {
+	case ORIENTATION_CC1:
+		val = 0x00;
+		break;
+	case ORIENTATION_CC2:
+		val = 0x01;
+		break;
+	default:
+		val = 0x11;
+		break;
+	}
+
+	ret = redriver_i2c_reg_set(redriver, AUX_CHANNEL_CONTROL, val);
+	if (ret < 0) {
+		dev_err(&client->dev, "%s: fail.\n", __func__);
+	} else {
+		dev_info(&client->dev, "%s: event(%d) success\n", __func__, event);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(ssusb_redriver_aux_switch);
 
 static const struct of_device_id redriver_match_table[] = {
 	{ .compatible = "onnn,redriver",},

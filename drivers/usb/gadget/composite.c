@@ -1981,20 +1981,33 @@ unknown:
 				if (w_index != 0x4 || (w_value >> 8))
 					break;
 				buf[6] = w_index;
-				/* Number of ext compat interfaces */
-				count = count_ext_compat(os_desc_cfg);
-				/*
-				 * Bailout if device does not
-				 * have ext_compat interfaces.
-				 */
-				if (count == 0)
-					break;
-				buf[8] = count;
-				count *= 24; /* 24 B/ext compat desc */
-				count += 16; /* header */
-				put_unaligned_le32(count, buf);
-				value = w_length;
-				if (w_length > 0x10) {
+
+				if (w_length == 0x10) {
+					/* Number of ext compat interfaces */
+					count = count_ext_compat(os_desc_cfg);
+					if (count == 0) {
+						/* Stall request if not get os desc, */
+						/* e.g., single mass storage function. */
+						break;
+					}
+					buf[8] = count;
+					count *= 24; /* 24 B/ext compat desc */
+					count += 16; /* header */
+					put_unaligned_le32(count, buf);
+					value = w_length;
+				} else {
+					/* "extended compatibility ID"s */
+					count = count_ext_compat(os_desc_cfg);
+					if (count == 0) {
+						/* Stall request if not get os desc, */
+						/* e.g., single mass storage function. */
+						break;
+					}
+					buf[8] = count;
+					count *= 24; /* 24 B/ext compat desc */
+					count += 16; /* header */
+					put_unaligned_le32(count, buf);
+					buf += 16;
 					value = fill_ext_compat(os_desc_cfg, buf);
 					value = min_t(u16, w_length, value);
 				}

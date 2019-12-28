@@ -3,6 +3,12 @@
 CFLAGS_trace.o				:= -I$(src)
 CFLAGS_dwc3-msm.o                       := -Idrivers/usb/host -Idrivers/base/power
 
+ifeq ($(ZTE_DISABLE_HOST_MODE),1)
+ccflags-y += -DZTE_DISABLE_HOST_MODE=1
+else
+ccflags-y += -DZTE_DISABLE_HOST_MODE=0
+endif
+
 obj-$(CONFIG_USB_DWC3)			+= dwc3.o
 
 dwc3-y					:= core.o debug_ipc.o
