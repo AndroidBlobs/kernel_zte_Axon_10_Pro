@@ -31,7 +31,11 @@
 #include "dsi_pwr.h"
 #include "sde_dbg.h"
 #include "dsi_parser.h"
-
+/*zte add common function for lcd module begin*/
+#ifdef CONFIG_ZTE_LCD_COMMON_FUNCTION
+#include "zte_lcd_common.h"
+#endif
+/*zte add common function for lcd module end*/
 #define to_dsi_display(x) container_of(x, struct dsi_display, host)
 #define INT_BASE_10 10
 #define NO_OVERRIDE -1
@@ -45,6 +49,10 @@
 #define MAX_TE_SOURCE_ID  2
 
 DEFINE_MUTEX(dsi_display_clk_mutex);
+
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_TCM
+extern int syna_tcm_notifier_cb(bool enable);
+#endif
 
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 static char dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
@@ -1065,6 +1073,9 @@ int dsi_display_set_power(struct drm_connector *connector,
 		int power_mode, void *disp)
 {
 	struct dsi_display *display = disp;
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_TCM
+	static bool panel_in_low_power = false;
+#endif
 	int rc = 0;
 
 	if (!display || !display->panel) {
@@ -1074,13 +1085,33 @@ int dsi_display_set_power(struct drm_connector *connector,
 
 	switch (power_mode) {
 	case SDE_MODE_DPMS_LP1:
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_TCM
+		panel_in_low_power = true;
+		syna_tcm_notifier_cb(true);
+#endif
 		rc = dsi_panel_set_lp1(display->panel);
+#ifdef CONFIG_ZTE_LCD_AOD_BRIGHTNESS_CTRL
+		panel_set_aod_brightness(display->panel,
+				display->panel->zte_lcd_ctrl->lcd_aod_brightness);
+#endif
+		display->panel->zte_panel_state = 1;
+		pr_info("MSM_LCD Enter LP1\n");
 		break;
 	case SDE_MODE_DPMS_LP2:
 		rc = dsi_panel_set_lp2(display->panel);
+		pr_info("MSM_LCD Enter LP2\n");
 		break;
 	default:
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_TCM
+		if (panel_in_low_power) {
+			panel_in_low_power = false;
+			syna_tcm_notifier_cb(false);
+			pr_info("MSM_LCD Exit LP1\n");
+		}
+#endif
+		display->panel->zte_panel_state = 0;
 		rc = dsi_panel_set_nolp(display->panel);
+		pr_info("MSM_LCD Exit LP\n");
 		break;
 	}
 	return rc;
@@ -2833,9 +2864,21 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 	} else {
 		int ctrl_idx = (msg->flags & MIPI_DSI_MSG_UNICAST) ?
 				msg->ctrl : 0;
-
+/*modify by zte for lcd mipi read register start*/
+#ifdef CONFIG_ZTE_LCD_REG_DEBUG
+		pr_debug("MSM_LCD dsi_ctrl_cmd_transfer type=%x\n", msg->type);
+		if (msg->type == 0x06) {/*DTYPE_DCS_READ*/
+			rc = dsi_ctrl_cmd_transfer(display->ctrl[ctrl_idx].ctrl, msg,
+					DSI_CTRL_CMD_FETCH_MEMORY | DSI_CTRL_CMD_READ | DSI_CTRL_CMD_CUSTOM_DMA_SCHED);
+		} else {
+			rc = dsi_ctrl_cmd_transfer(display->ctrl[ctrl_idx].ctrl, msg,
+						  DSI_CTRL_CMD_FETCH_MEMORY);
+		}
+#else
 		rc = dsi_ctrl_cmd_transfer(display->ctrl[ctrl_idx].ctrl, msg,
 					  DSI_CTRL_CMD_FETCH_MEMORY);
+#endif
+/*modify by zte for lcd mipi read register end*/
 		if (rc) {
 			pr_err("[%s] cmd transfer failed, rc=%d\n",
 			       display->name, rc);
@@ -6910,6 +6953,8 @@ int dsi_display_prepare(struct dsi_display *display)
 		       display->name, rc);
 		goto error_host_engine_off;
 	}
+
+	/*mdelay(10);add by ZTE, delay 10ms to wait clock stabilization*/
 
 	if (!display->is_cont_splash_enabled) {
 		/*

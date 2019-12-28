@@ -1052,16 +1052,51 @@ EXPORT_SYMBOL(mipi_dsi_dcs_set_tear_scanline);
  *
  * Return: 0 on success or a negative error code on failure.
  */
+/* add by zte for lcd aod backlight flash start*/
+extern bool aod_need_skip_frame;
+u16 aod_recovery_brightness = 0x0;
+/* add by zte for lcd aod backlight flash end*/
 int mipi_dsi_dcs_set_display_brightness(struct mipi_dsi_device *dsi,
 					u16 brightness)
 {
-	u8 payload[2] = { brightness & 0xff, brightness >> 8 };
+	/* u8 payload[2] = { brightness & 0xff, brightness >> 8 }; */
+	u8 payload[2] = { brightness >> 8, brightness & 0xff}; /* change by zte */
 	ssize_t err;
+/* add by zte for lcd backlight dim start*/
+	static u16 pre_brightness = 0;
+	static bool bl_dim = false;
+	u8 value_dim = 0x28;
+/* add by zte for lcd backlight dim end*/
 
+/* add by zte for lcd aod backlight flash start*/
+	aod_recovery_brightness = 0x0;
+	if (aod_need_skip_frame && (brightness != 0)) {
+		pr_info("MSM_LCD don't update brightness when enter aod mode\n");
+		aod_recovery_brightness = brightness;
+		return 0;
+	}
+/* add by zte for lcd aod backlight flash end*/
 	err = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_DISPLAY_BRIGHTNESS,
 				 payload, sizeof(payload));
 	if (err < 0)
 		return err;
+
+/* add by zte for lcd backlight dim start*/
+	if (brightness == 0)
+		bl_dim = false;
+
+	if (bl_dim) {
+		pr_info("MSM_LCD to update dcs dim:%d\n", bl_dim);
+		bl_dim = false;
+		err = mipi_dsi_dcs_write(dsi, MIPI_DCS_WRITE_CONTROL_DISPLAY, &value_dim, 1);
+		if (err < 0)
+			return err;
+	}
+	if (pre_brightness == 0 && brightness != 0)
+		bl_dim = true;
+
+	pre_brightness = brightness;
+/* add by zte for lcd backlight dim end*/
 
 	return 0;
 }

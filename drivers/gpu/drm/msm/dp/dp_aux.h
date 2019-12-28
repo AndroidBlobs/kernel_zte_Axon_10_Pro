@@ -65,4 +65,8 @@ struct dp_aux *dp_aux_get(struct device *dev, struct dp_catalog_aux *catalog,
 		struct dp_parser *parser, struct device_node *aux_switch);
 void dp_aux_put(struct dp_aux *aux);
 
+void set_alternative_aux_switch_node(struct dp_aux *aux,
+		struct device_node *aux_switch);
+extern int ssusb_redriver_aux_switch(struct device_node *node, int event);
+
 #endif /*__DP_AUX_H_*/

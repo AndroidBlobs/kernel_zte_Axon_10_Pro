@@ -23,6 +23,13 @@
 #include "dsi_ctrl_hw.h"
 #include "dsi_parser.h"
 
+/*zte add common function for lcd module begin*/
+#ifdef CONFIG_ZTE_LCD_COMMON_FUNCTION
+#include "zte_lcd_common.h"
+extern struct dsi_panel *g_zte_ctrl_pdata;
+#endif
+/*zte add common function for lcd module end*/
+
 /**
  * topology is currently defined by a set of following 3 values:
  * 1. num of layer mixers
@@ -41,6 +48,14 @@
 #define DEFAULT_PANEL_JITTER_ARRAY_SIZE		2
 #define MAX_PANEL_JITTER		10
 #define DEFAULT_PANEL_PREFILL_LINES	25
+#ifdef CONFIG_ZTE_LCD_HBM_CTRL
+#define HDR_MAX_BACKLIGHT_LEVEL   0XE10
+#endif
+/*zte add common function for lcd module begin*/
+#ifdef CONFIG_ZTE_LCD_COMMON_FUNCTION
+extern void zte_lcd_common_func(struct dsi_panel *panel, struct device_node *node);
+#endif
+/*zte add common function for lcd module end*/
 
 enum dsi_dsc_ratio_type {
 	DSC_8BPC_8BPP,
@@ -503,16 +518,20 @@ static int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 	u32 count;
 	enum dsi_cmd_set_state state;
 	struct dsi_display_mode *mode;
-	const struct mipi_dsi_host_ops *ops = panel->host->ops;
+	const struct mipi_dsi_host_ops *ops;
 
 	if (!panel || !panel->cur_mode)
 		return -EINVAL;
+
+	ops = panel->host->ops;
 
 	mode = panel->cur_mode;
 
 	cmds = mode->priv_info->cmd_sets[type].cmds;
 	count = mode->priv_info->cmd_sets[type].count;
 	state = mode->priv_info->cmd_sets[type].state;
+
+	pr_info("MSM_LCD dsi set cmds count=%d\n", count);
 
 	if (count == 0) {
 		pr_debug("[%s] No commands to be sent for state(%d)\n",
@@ -629,11 +648,56 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 {
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
+#if defined(CONFIG_ZTE_LCD_COMMON_FUNCTION) && defined(CONFIG_ZTE_LCD_BACKLIGHT_LEVEL_CURVE)
+	u32 pre_lvl = 0;
+#endif
 
 	if (panel->host_config.ext_bridge_mode)
 		return 0;
 
-	pr_debug("backlight type:%d lvl:%d\n", bl->type, bl_lvl);
+#if defined(CONFIG_ZTE_LCD_COMMON_FUNCTION) && defined(CONFIG_ZTE_LCD_BACKLIGHT_LEVEL_CURVE)
+	pre_lvl = bl_lvl;
+	if (!g_zte_ctrl_pdata->zte_lcd_ctrl) {
+		pr_info("[MSM_LCD] %s: no llcd backlight curve\n", __func__);
+	} else {
+		bl_lvl = g_zte_ctrl_pdata->zte_lcd_ctrl->zte_convert_brightness(bl_lvl,
+							panel->bl_config.bl_max_level);
+		if ((bl_lvl > panel->bl_config.bl_max_level) && (bl_lvl != 0))
+			bl_lvl = panel->bl_config.bl_max_level;
+
+		if ((bl_lvl < panel->bl_config.bl_min_level) && (bl_lvl != 0))
+			bl_lvl = panel->bl_config.bl_min_level;
+		pr_info("[MSM_LCD] %s: change bl_level from %d to %d!\n", __func__, pre_lvl, bl_lvl);
+	}
+#else
+	if ((bl_lvl > panel->bl_config.bl_max_level) && (bl_lvl != 0))
+		bl_lvl = panel->bl_config.bl_max_level;
+
+	if ((bl_lvl < panel->bl_config.bl_min_level) && (bl_lvl != 0))
+		bl_lvl = panel->bl_config.bl_min_level;
+
+	pr_info("MSM_LCD backlight type:%d bl_level:%d\n", bl->type, bl_lvl);
+#endif
+/*modify by zte for visionox rm692a4 lcd minimum brightness start*/
+	if ((!strcmp(panel->name, "Visionox-RM692A4-otpt3-1080-2340-6P5Inch")) ||
+			(!strcmp(panel->name, "Visionox-RM692A4-nootp240nit-1080-2340-6P5Inch"))) {
+		if (bl_lvl < 10 && bl_lvl > 0)
+			bl_lvl = panel->bl_config.bl_min_level;
+	}
+/*modify by zte for visionox rm692a4 lcd minimum brightness end*/
+#ifdef CONFIG_ZTE_LCD_HBM_CTRL
+	if (panel->zte_lcd_ctrl->lcd_hdr_on != 0) {
+		if ((!strcmp(panel->name, "Visionox-RM692A4-otpt3-1080-2340-6P5Inch")) ||
+				(!strcmp(panel->name, "Visionox-RM692A4-nootp240nit-1080-2340-6P5Inch"))) {
+			if ((bl_lvl > 10) && (panel->bl_config.bl_max_level != 0))
+				bl_lvl = bl_lvl * HDR_MAX_BACKLIGHT_LEVEL / panel->bl_config.bl_max_level;
+			if (bl_lvl > HDR_MAX_BACKLIGHT_LEVEL)
+				bl_lvl = HDR_MAX_BACKLIGHT_LEVEL; /* 540nit, for HDR mode */
+		}
+		pr_info("MSM_LCD HDR backlight after convert, bl_level:%d\n", bl_lvl);
+	}
+#endif
+	panel->bl_config.real_bl_level_to_panel = bl_lvl; /*zte add for hbm*/
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
 		rc = backlight_device_set_brightness(bl->raw_bd, bl_lvl);
@@ -3100,6 +3164,12 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	if (rc)
 		pr_err("failed to parse power config, rc=%d\n", rc);
 
+	/*zte add common function for lcd module begin*/
+	#ifdef CONFIG_ZTE_LCD_COMMON_FUNCTION
+	zte_lcd_common_func(panel, of_node);
+	#endif
+	/*zte add common function for lcd module end*/
+
 	rc = dsi_panel_parse_bl_config(panel);
 	if (rc)
 		pr_err("failed to parse backlight config, rc=%d\n", rc);
@@ -3472,8 +3542,10 @@ int dsi_panel_get_host_cfg_for_mode(struct dsi_panel *panel,
 
 	memcpy(&config->video_timing, &mode->timing,
 	       sizeof(config->video_timing));
+
 	config->video_timing.mdp_transfer_time_us =
-			mode->priv_info->mdp_transfer_time_us;
+		mode->priv_info->mdp_transfer_time_us;
+
 	config->video_timing.dsc_enabled = mode->priv_info->dsc_enabled;
 	config->video_timing.dsc = &mode->priv_info->dsc;
 
@@ -3594,6 +3666,7 @@ exit:
 	return rc;
 }
 
+extern u16 aod_recovery_brightness;/* add by zte for lcd aod backlight flash start*/
 int dsi_panel_set_nolp(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -3611,6 +3684,14 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_NOLP cmd, rc=%d\n",
 		       panel->name, rc);
+
+	/* add by zte for lcd aod backlight flash start*/
+	if (aod_recovery_brightness != 0) {
+		pr_info("MSM_LCD only print once updates brightness when exit aod mode\n");
+		dsi_panel_update_backlight(panel, aod_recovery_brightness);
+	}
+	/* add by zte for lcd aod backlight flash end*/
+
 exit:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
@@ -3865,7 +3946,13 @@ int dsi_panel_enable(struct dsi_panel *panel)
 		       panel->name, rc);
 	else
 		panel->panel_initialized = true;
+
 	mutex_unlock(&panel->panel_lock);
+
+	panel->zte_panel_state = 0;
+
+	pr_info("MSM_LCD dsi Panel ON\n");
+	
 	return rc;
 }
 
@@ -3940,8 +4027,17 @@ int dsi_panel_disable(struct dsi_panel *panel)
 			rc = 0;
 		}
 	}
+	pr_info("MSM_LCD dsi Panel OFF\n");
 	panel->panel_initialized = false;
+	panel->zte_panel_state = 5;
 
+#ifdef CONFIG_ZTE_LCD_HBM_CTRL
+	if (panel->zte_lcd_ctrl->lcd_hbm_mode != 0) {
+		pr_info("HBM: set hbm mode to 0 when panel off\n");
+		panel->zte_lcd_ctrl->lcd_hbm_mode = 0;
+	}
+	g_zte_ctrl_pdata->zte_lcd_ctrl->lcd_hdr_on = 0;
+#endif
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }

@@ -1055,6 +1055,10 @@ drm_mode_validate_basic(const struct drm_display_mode *mode)
 }
 EXPORT_SYMBOL(drm_mode_validate_basic);
 
+static int valid_vrefresh_min = 0;
+module_param(valid_vrefresh_min, int, 0644);
+MODULE_PARM_DESC(valid_vrefresh_min, "valid_vrefresh_min");
+
 /**
  * drm_mode_validate_size - make sure modes adhere to size constraints
  * @mode: mode to check
@@ -1078,6 +1082,9 @@ drm_mode_validate_size(const struct drm_display_mode *mode,
 
 	if (maxY > 0 && mode->vdisplay > maxY)
 		return MODE_VIRTUAL_Y;
+
+	if (mode->vrefresh < valid_vrefresh_min)
+		return MODE_BAD;
 
 	return MODE_OK;
 }

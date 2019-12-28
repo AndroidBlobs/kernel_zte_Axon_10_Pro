@@ -79,6 +79,7 @@ struct dp_display_private {
 
 	struct platform_device *pdev;
 	struct device_node *aux_switch_node;
+	struct device_node *ssusb_redriver_node;
 	struct dentry *root;
 	struct completion notification_comp;
 
@@ -1319,6 +1320,11 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 		goto error_aux;
 	}
 
+	if (dp->ssusb_redriver_node) {
+		set_alternative_aux_switch_node(dp->aux,
+			dp->ssusb_redriver_node);
+	}
+
 	rc = dp->aux->drm_aux_register(dp->aux);
 	if (rc) {
 		pr_err("DRM DP AUX register failed\n");
@@ -2160,6 +2166,12 @@ static int dp_display_init_aux_switch(struct dp_display_private *dp)
 	if (!dp->aux_switch_node) {
 		pr_warn("cannot parse %s handle\n", phandle);
 		goto end;
+	}
+
+	dp->ssusb_redriver_node = of_parse_phandle(dp->pdev->dev.of_node,
+			"qcom,ssusb-redriver-aux-switch", 0);
+	if (!dp->ssusb_redriver_node) {
+		pr_warn("cannot parse qcom,ssusb-redriver-aux-switch handle\n");
 	}
 
 	nb.notifier_call = dp_display_fsa4480_callback;

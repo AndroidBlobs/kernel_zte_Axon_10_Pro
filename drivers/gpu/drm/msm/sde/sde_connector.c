@@ -146,7 +146,7 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	display = (struct dsi_display *) c_conn->display;
 	bl_config = &display->panel->bl_config;
 	props.max_brightness = bl_config->brightness_max_level;
-	props.brightness = bl_config->brightness_max_level;
+	props.brightness = bl_config->brightness_max_level / 2; /* zte set middle level*/
 	snprintf(bl_node_name, BL_NODE_NAME_SIZE, "panel%u-backlight",
 							display_count);
 	c_conn->bl_device = backlight_device_register(bl_node_name, dev->dev,
@@ -582,6 +582,7 @@ void sde_connector_set_qsync_params(struct drm_connector *connector)
 	}
 }
 
+bool aod_need_skip_frame = false;/* add by zte for lcd aod backlight flash start*/
 static int _sde_connector_update_dirty_properties(
 				struct drm_connector *connector)
 {
@@ -596,7 +597,17 @@ static int _sde_connector_update_dirty_properties(
 
 	c_conn = to_sde_connector(connector);
 	c_state = to_sde_connector_state(connector->state);
-
+/* add by zte for lcd aod backlight flash start*/
+	if (aod_need_skip_frame) {
+		aod_need_skip_frame = false;
+		mutex_lock(&c_conn->lock);
+		c_conn->lp_mode = sde_connector_get_property(
+				connector->state, CONNECTOR_PROP_LP);
+		pr_info("MSM_LCD only print once enter aod lp_mode =%d\n", c_conn->lp_mode);
+		_sde_connector_update_power_locked(c_conn);
+		mutex_unlock(&c_conn->lock);
+	}
+/* add by zte for lcd aod backlight flash end*/
 	while ((idx = msm_property_pop_dirty(&c_conn->property_info,
 					&c_state->property_state)) >= 0) {
 		switch (idx) {
@@ -604,7 +615,15 @@ static int _sde_connector_update_dirty_properties(
 			mutex_lock(&c_conn->lock);
 			c_conn->lp_mode = sde_connector_get_property(
 					connector->state, CONNECTOR_PROP_LP);
-			_sde_connector_update_power_locked(c_conn);
+			/* add by zte for lcd aod backlight flash start*/
+			if (c_conn->lp_mode == SDE_MODE_DPMS_LP1) {
+				pr_info("MSM_LCD only print once skip aod lp_mode =%d\n", c_conn->lp_mode);
+				aod_need_skip_frame = true;
+			}
+			if (!aod_need_skip_frame) {
+				_sde_connector_update_power_locked(c_conn);
+			}
+			/* add by zte for lcd aod backlight flash end*/
 			mutex_unlock(&c_conn->lock);
 			break;
 		case CONNECTOR_PROP_BL_SCALE:
@@ -668,7 +687,6 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 	}
 
 	SDE_EVT32_VERBOSE(connector->base.id);
-
 	rc = c_conn->ops.pre_kickoff(connector, c_conn->display, &params);
 
 end:

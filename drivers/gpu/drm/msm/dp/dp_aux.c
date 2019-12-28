@@ -32,6 +32,7 @@ struct dp_aux_private {
 	struct dp_catalog_aux *catalog;
 	struct dp_aux_cfg *cfg;
 	struct device_node *aux_switch_node;
+	struct device_node *ssusb_redriver_node;
 	struct mutex mutex;
 	struct completion comp;
 	struct drm_dp_aux drm_aux;
@@ -805,6 +806,12 @@ static int dp_aux_configure_aux_switch(struct dp_aux *dp_aux,
 	rc = fsa4480_switch_event(aux->aux_switch_node, event);
 	if (rc)
 		pr_err("failed to configure fsa4480 i2c device (%d)\n", rc);
+
+	/* If failed to configure fsa4480 i2c device,
+	try to switch aux pins by ssusb redriver chip. */
+	if (rc) {
+		rc = ssusb_redriver_aux_switch(aux->ssusb_redriver_node, orientation);
+	}
 end:
 	return rc;
 }
@@ -871,4 +878,20 @@ void dp_aux_put(struct dp_aux *dp_aux)
 	mutex_destroy(&aux->mutex);
 
 	devm_kfree(aux->dev, aux);
+}
+
+/*
+ * Get ssusb redriver device node for configuring its registers
+ * when try to switch aux channel by ssusb redriver chip.
+ */
+void set_alternative_aux_switch_node(struct dp_aux *dp_aux,
+		struct device_node *aux_switch)
+{
+	struct dp_aux_private *aux_private;
+
+	if (!dp_aux || !aux_switch)
+		return;
+
+	aux_private = container_of(dp_aux, struct dp_aux_private, dp_aux);
+	aux_private->ssusb_redriver_node = aux_switch;
 }
