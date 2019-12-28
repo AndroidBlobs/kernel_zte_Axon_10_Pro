@@ -11,9 +11,24 @@ menuconfig INPUT_TOUCHSCREEN
 
 if INPUT_TOUCHSCREEN
 
+config TS_FIRMWARE
+	string "config board firmware folder"
+config TS_FIRMWARE_PALM
+	string "config board firmware folder for palm"
+
+source "drivers/input/touchscreen/synaptics_zte_2.7/Kconfig"
+source "drivers/input/touchscreen/synaptics_tcm/Kconfig"
+
 config TOUCHSCREEN_PROPERTIES
 	def_tristate INPUT
 	depends on INPUT
+
+config TP_COMMON_INTERFACE
+	bool "tp proc folder"
+	help
+	  Say Y here if you  want to have a common tp proc folder
+
+	  If unsure, say N.
 
 config TOUCHSCREEN_88PM860X
 	tristate "Marvell 88PM860x touchscreen"
@@ -1288,5 +1303,17 @@ config TOUCHSCREEN_SYNAPTICS_DSX
           If unsure, say N.
 
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
+
+config TOUCHSCREEN_GT9XX_ZTE
+	bool "Goodix touchpanel GT9xx_zte series"
+	depends on I2C
+	help
+	  Say Y here if you have a Goodix GT9xx touchscreen.
+	  Gt9xx controllers are multi touch controllers which can
+	  report 5 touches at a time.
+
+          If unsure, say N.
+
+source "drivers/input/touchscreen/gt9xx_zte/Kconfig"
 
 endif
