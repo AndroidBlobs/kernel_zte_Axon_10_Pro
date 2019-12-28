@@ -361,6 +361,7 @@ void a6xx_preemption_trigger(struct adreno_device *adreno_dev)
 		FENCE_STATUS_WRITEDROPPED1_MASK))
 		goto err;
 
+
 	/*
 	 * Above fence writes will make sure GMU comes out of
 	 * IFPC state if its was in IFPC state but it doesn't
