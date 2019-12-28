@@ -793,6 +793,22 @@ static bool __init_or_module initcall_blacklisted(initcall_t fn)
 #endif
 __setup("initcall_blacklist=", initcall_blacklist);
 
+static int __init initcall_debug_enable(char *p)
+{
+	int ret;
+	unsigned long val;
+
+	ret = kstrtoul(p, 10, &val); /* decimal format */
+	if (ret) /* invalid with -ERANGE or -EINVAL */
+		return ret;
+
+	if (val) /* non-zero */
+		initcall_debug = true;
+
+	return 0;
+}
+__setup("initcall_debug.enable=", initcall_debug_enable);
+
 static int __init_or_module do_one_initcall_debug(initcall_t fn)
 {
 	ktime_t calltime, delta, rettime;
