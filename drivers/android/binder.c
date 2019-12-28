@@ -76,6 +76,9 @@
 #include <uapi/linux/sched/types.h>
 #include "binder_alloc.h"
 #include "binder_trace.h"
+/**** ZSW_ADD FOR CPUFREEZER begin ****/
+#include <stdbool.h>
+/**** ZSW_ADD FOR CPUFREEZER end ****/
 
 static HLIST_HEAD(binder_deferred_list);
 static DEFINE_MUTEX(binder_deferred_lock);
@@ -119,6 +122,16 @@ BINDER_DEBUG_ENTRY(proc);
 
 #define FORBIDDEN_MMAP_FLAGS                (VM_WRITE)
 
+/**** ZSW_ADD FOR CPUFREEZER begin ****/
+
+#ifndef ZTE_FEATURE_CGROUP_FREEZER
+#define ZTE_FEATURE_CGROUP_FREEZER               false
+#endif
+
+#ifndef ZTE_FEATURE_CGROUP_FREEZER_V2
+#define ZTE_FEATURE_CGROUP_FREEZER_V2            false
+#endif
+/**** ZSW_ADD FOR CPUFREEZER end ****/
 enum {
 	BINDER_DEBUG_USER_ERROR             = 1U << 0,
 	BINDER_DEBUG_FAILED_TRANSACTION     = 1U << 1,
@@ -2817,8 +2830,22 @@ static bool binder_proc_transaction(struct binder_transaction *t,
 		binder_transaction_priority(thread->task, t, node_prio,
 					    node->inherit_rt);
 		binder_enqueue_thread_work_ilocked(thread, &t->work);
+/* ZSW_ADD FOR CPUFREEZER begin */
+#if (ZTE_FEATURE_CGROUP_FREEZER == true || ZTE_FEATURE_CGROUP_FREEZER_V2 == true)
+		if (cgroup_needunfreeze_task(thread->task) && (!oneway)) {
+			cgroup_binder_unfreeze(thread->task);
+		}
+#endif
+/* ZSW_ADD FOR CPUFREEZER end */
 	} else if (!pending_async) {
 		binder_enqueue_work_ilocked(&t->work, &proc->todo);
+/* ZSW_ADD FOR CPUFREEZER begin */
+#if (ZTE_FEATURE_CGROUP_FREEZER == true || ZTE_FEATURE_CGROUP_FREEZER_V2 == true)
+		if (cgroup_needunfreeze_task(proc->tsk) && (!oneway)) {
+			cgroup_binder_unfreeze(proc->tsk);
+		}
+#endif
+/* ZSW_ADD FOR CPUFREEZER end */
 	} else {
 		binder_enqueue_work_ilocked(&t->work, &node->async_todo);
 	}
