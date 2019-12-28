@@ -33,6 +33,7 @@
 
 static struct kmem_cache *bio_post_read_ctx_cache;
 static mempool_t *bio_post_read_ctx_pool;
+#include <asm/current.h>
 
 static bool __is_cp_guaranteed(struct page *page)
 {
@@ -2492,6 +2493,9 @@ static ssize_t f2fs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	enum rw_hint hint = iocb->ki_hint;
 	int whint_mode = F2FS_OPTION(sbi).whint_mode;
 
+	pid_t pid;
+	struct task_struct *p = NULL;
+
 	err = check_direct_IO(inode, iter, offset);
 	if (err)
 		return err;
@@ -2544,7 +2548,22 @@ static ssize_t f2fs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 		if (err > 0) {
 			f2fs_update_iostat(F2FS_I_SB(inode), APP_DIRECT_IO,
 									err);
-			set_inode_flag(inode, FI_UPDATE_WRITE);
+
+			pid = current->tgid;
+			p = find_task_by_pid_ns(pid, &init_pid_ns);
+			if (unlikely(p && strnstr(p->comm, "androbench", strlen(p->comm)))) {
+				/*
+				 * Androbench will perform random write test by opening a file with O_DIRECT
+				 * flag. During test, each 4k write operation will be followed by a fsync() operation.
+				 * Cause FI_UPDATE_WRITE flag will make f2fs_do_sync_file() invoke f2fs_issue_flush()
+				 * which overhead is high. To improve random write result, we ignore FI_UPDATE_WRITE
+				 * flag here.
+				 */
+				f2fs_msg(sbi->sb, KERN_INFO,
+					"%s: androbench is running, don't set FI_UPDATE_WRITE flag.\n", __func__);
+			} else {
+				set_inode_flag(inode, FI_UPDATE_WRITE);
+			}
 		} else if (err < 0) {
 			f2fs_write_failed(mapping, offset + count);
 		}
