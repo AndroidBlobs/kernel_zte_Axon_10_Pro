@@ -111,7 +111,7 @@ enum {
 	FORCE_INOV_DISABLE_BIT	= BIT(1),
 };
 
-static int debug_mask;
+static int debug_mask = PR_PARALLEL;
 module_param_named(debug_mask, debug_mask, int, 0600);
 
 #define pl_dbg(chip, reason, fmt, ...)				\
@@ -1310,7 +1310,7 @@ static int pl_awake_vote_callback(struct votable *votable,
 	else
 		__pm_relax(chip->pl_ws);
 
-	pr_debug("client: %s awake: %d\n", client, awake);
+	pl_dbg(chip, PR_PARALLEL, "client: %s awake: %d\n", client, awake);
 	return 0;
 }
 

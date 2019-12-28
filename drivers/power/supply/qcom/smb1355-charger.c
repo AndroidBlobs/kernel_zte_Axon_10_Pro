@@ -702,7 +702,7 @@ static int smb1355_parallel_get_prop(struct power_supply *psy,
 	}
 
 	if (rc < 0) {
-		pr_debug("Couldn't get prop %d rc = %d\n", prop, rc);
+		pr_err("Couldn't get prop %d rc = %d\n", prop, rc);
 		return -ENODATA;
 	}
 
@@ -713,6 +713,7 @@ static int smb1355_set_parallel_charging(struct smb1355 *chip, bool disable)
 {
 	int rc;
 
+	pr_info("disable:%d, disabled:%d\n", disable, chip->disabled);
 	if (chip->disabled == disable)
 		return 0;
 
@@ -783,6 +784,7 @@ static int smb1355_set_current_max(struct smb1355 *chip, int curr)
 {
 	int rc = 0;
 
+	pr_info("curr:%d\n", curr);
 	if (!IS_USBIN(chip->dt.pl_mode))
 		return 0;
 
@@ -1359,6 +1361,7 @@ static int smb1355_irq_disable_callback(struct votable *votable, void *data,
 {
 	int i;
 
+	pr_info("client:%s, disable:%d\n", client, disable);
 	for (i = 0; i < ARRAY_SIZE(smb1355_irqs); i++) {
 		if (smb1355_irqs[i].irq) {
 			if (disable)

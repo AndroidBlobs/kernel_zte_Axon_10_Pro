@@ -284,6 +284,9 @@ int get_effective_result(struct votable *votable)
 {
 	int value;
 
+	if (!votable) {
+		return -EINVAL;
+	}
 	lock_votable(votable);
 	value = get_effective_result_locked(votable);
 	unlock_votable(votable);
@@ -511,6 +514,30 @@ out:
 }
 DEFINE_SIMPLE_ATTRIBUTE(votable_force_ops, force_active_get, force_active_set,
 		"%lld\n");
+
+int vote_force_active(struct votable *votable, bool enabled, int val)
+{
+	int rc = 0;
+
+	pr_err("%s: %s\n", __func__, votable->name);
+	lock_votable(votable);
+	votable->force_active = enabled;
+	votable->force_val = val;
+
+	if (!votable->callback)
+		goto out;
+
+	if (enabled) {
+		rc = votable->callback(votable, votable->data, votable->force_val, DEBUG_FORCE_CLIENT);
+	} else {
+		rc = votable->callback(votable, votable->data,
+			votable->effective_result,
+			get_client_str(votable, votable->effective_client_id));
+	}
+out:
+	unlock_votable(votable);
+	return rc;
+}
 
 static int show_votable_clients(struct seq_file *m, void *data)
 {

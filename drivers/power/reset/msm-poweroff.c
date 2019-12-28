@@ -34,6 +34,8 @@
 #include <soc/qcom/restart.h>
 #include <soc/qcom/watchdog.h>
 #include <soc/qcom/minidump.h>
+#include <soc/qcom/vendor/debug_policy.h>
+
 
 #define EMERGENCY_DLOAD_MAGIC1    0x322A4F99
 #define EMERGENCY_DLOAD_MAGIC2    0xC67E4350
@@ -48,6 +50,10 @@
 #define SCM_DLOAD_CMD			0x10
 #define SCM_DLOAD_MINIDUMP		0X20
 #define SCM_DLOAD_BOTHDUMPS	(SCM_DLOAD_MINIDUMP | SCM_DLOAD_FULLDUMP)
+
+
+
+
 
 static int restart_mode;
 static void *restart_reason, *dload_type_addr;
@@ -66,6 +72,9 @@ static void scm_disable_sdi(void);
 static int download_mode = 1;
 static struct kobject dload_kobj;
 
+#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+void *zte_restart_reason;
+#endif
 #ifdef CONFIG_QCOM_DLOAD_MODE
 #define EDL_MODE_PROP "qcom,msm-imem-emergency_download_mode"
 #define DL_MODE_PROP "qcom,msm-imem-download_mode"
@@ -102,6 +111,10 @@ struct reset_attribute {
 
 module_param_call(download_mode, dload_set, param_get_int,
 			&download_mode, 0644);
+
+static int restart_type = 0;
+module_param_call(restart_type, param_set_int, param_get_int,
+			&restart_type, 0644);
 
 static int panic_prep_restart(struct notifier_block *this,
 			      unsigned long event, void *ptr)
@@ -149,6 +162,9 @@ static void set_dload_mode(int on)
 	if (ret)
 		pr_err("Failed to set secure DLOAD mode: %d\n", ret);
 
+	/* zte add kernel log */
+	pr_notice("zte_restart set_dload_mode %d to %d\n",
+		dload_mode_enabled, on);
 	dload_mode_enabled = on;
 }
 
@@ -190,11 +206,6 @@ static int dload_set(const char *val, const struct kernel_param *kp)
 
 	int old_val = download_mode;
 
-	if (!download_mode) {
-		pr_err("Error: SDI dynamic enablement is not supported\n");
-		return -EINVAL;
-	}
-
 	ret = param_set_int(val, kp);
 
 	if (ret)
@@ -207,9 +218,6 @@ static int dload_set(const char *val, const struct kernel_param *kp)
 	}
 
 	set_dload_mode(download_mode);
-
-	if (!download_mode)
-		scm_disable_sdi();
 
 	return 0;
 }
@@ -284,6 +292,10 @@ static void msm_restart_prepare(const char *cmd)
 	set_dload_mode(download_mode &&
 			(in_panic || restart_mode == RESTART_DLOAD));
 #endif
+#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+	qpnp_pon_set_restart_reason(PON_RESTART_REASON_UNKNOWN);
+	__raw_writel(0x0, restart_reason);
+#endif
 
 	if (qpnp_pon_check_hard_reset_stored()) {
 		/* Set warm reset as true when device is in dload mode */
@@ -291,6 +303,13 @@ static void msm_restart_prepare(const char *cmd)
 			((cmd != NULL && cmd[0] != '\0') &&
 			!strcmp(cmd, "edl")))
 			need_warm_reset = true;
+		if ((cmd != NULL && cmd[0] != '\0') &&
+			!strcmp(cmd, "LONGPRESS"))
+			need_warm_reset = download_mode ? true : false;
+		if (restart_type) {
+			pr_info("set restart type to warm reset\n");
+			need_warm_reset = true;
+		}
 	} else {
 		need_warm_reset = (get_dload_mode() ||
 				(cmd != NULL && cmd[0] != '\0'));
@@ -300,10 +319,14 @@ static void msm_restart_prepare(const char *cmd)
 		pr_info("Forcing a warm reset of the system\n");
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
-	if (force_warm_reboot || need_warm_reset)
+	if (force_warm_reboot || need_warm_reset) {
+		/* zte add kernel log */
+		pr_notice("zte_restart flags %d, %d, %d\n",
+			in_panic, download_mode, restart_mode);
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
-	else
+	} else {
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
+	}
 
 	if (cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {
@@ -318,6 +341,10 @@ static void msm_restart_prepare(const char *cmd)
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_RTC);
 			__raw_writel(0x77665503, restart_reason);
+		} else if (!strcmp(cmd, "ftmmode")) {
+			qpnp_pon_set_restart_reason(
+				PON_RESTART_REASON_FTMMODE);
+			__raw_writel(0x776655ee, restart_reason);
 		} else if (!strcmp(cmd, "dm-verity device corrupted")) {
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_DMVERITY_CORRUPTED);
@@ -547,12 +574,18 @@ static struct attribute_group reset_attr_group = {
 	.attrs = reset_attrs,
 };
 
+#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+int zte_power_panic;
+#endif
 static int msm_restart_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct resource *mem;
 	struct device_node *np;
 	int ret = 0;
+#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+	int restart_panic_1, restart_panic_2;
+#endif
 
 #ifdef CONFIG_QCOM_DLOAD_MODE
 	if (scm_is_call_available(SCM_SVC_BOOT, SCM_DLOAD_CMD) > 0)
@@ -631,6 +664,9 @@ skip_sysfs_create:
 	if (!np) {
 		pr_err("unable to find DT imem restart reason node\n");
 	} else {
+		#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+		zte_restart_reason = of_iomap(np, 0);
+		#endif
 		restart_reason = of_iomap(np, 0);
 		if (!restart_reason) {
 			pr_err("unable to map imem restart reason offset\n");
@@ -638,7 +674,13 @@ skip_sysfs_create:
 			goto err_restart_reason;
 		}
 	}
-
+#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+	restart_panic_1 = qpnp_pon_read_restart_reason();
+	restart_panic_2 = __raw_readl(zte_restart_reason);
+	if (restart_panic_1 == PON_RESTART_REASON_PANIC || restart_panic_2 == 0x776655ff) {
+		zte_power_panic = PON_RESTART_REASON_PANIC;
+	}
+#endif
 	mem = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pshold-base");
 	msm_ps_hold = devm_ioremap_resource(dev, mem);
 	if (IS_ERR(msm_ps_hold))
@@ -658,6 +700,15 @@ skip_sysfs_create:
 	if (scm_is_call_available(SCM_SVC_PWR, SCM_IO_DEASSERT_PS_HOLD) > 0)
 		scm_deassert_ps_hold_supported = true;
 
+
+#ifdef CONFIG_ANDROID_LOGGER
+#ifdef CONFIG_ANDROID_ZLOG_BUFFER
+	if (!is_kernel_log_driver_enabled())
+		download_mode = 0;
+#endif
+#endif
+
+
 	set_dload_mode(download_mode);
 	if (!download_mode)
 		scm_disable_sdi();
@@ -671,6 +722,10 @@ err_restart_reason:
 #ifdef CONFIG_QCOM_DLOAD_MODE
 	iounmap(emergency_dload_mode_addr);
 	iounmap(dload_mode_addr);
+#endif
+#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+	qpnp_pon_set_restart_reason(PON_RESTART_REASON_PANIC);
+	__raw_writel(0x776655ff, zte_restart_reason);
 #endif
 	return ret;
 }

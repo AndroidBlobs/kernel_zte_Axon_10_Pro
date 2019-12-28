@@ -67,6 +67,10 @@
 #define CORE_FTRIM_ILIM_REG		0x1030
 #define CFG_ILIM_MASK			GENMASK(4, 0)
 
+#define CORE_FTRIM_OSC			0x1032
+#define CFG_OSC_MASK			GENMASK(4, 0)
+#define CFG_OSC_800KHZ			0x07
+
 #define CORE_FTRIM_LVL_REG		0x1033
 #define CFG_WIN_HI_MASK			GENMASK(3, 2)
 #define WIN_OV_LVL_1000MV		0x08
@@ -183,7 +187,7 @@ static bool is_psy_voter_available(struct smb1390 *chip)
 	if (!chip->batt_psy) {
 		chip->batt_psy = power_supply_get_by_name("battery");
 		if (!chip->batt_psy) {
-			pr_debug("Couldn't find battery psy\n");
+			pr_err("Couldn't find battery psy\n");
 			return false;
 		}
 	}
@@ -191,7 +195,7 @@ static bool is_psy_voter_available(struct smb1390 *chip)
 	if (!chip->usb_psy) {
 		chip->usb_psy = power_supply_get_by_name("usb");
 		if (!chip->usb_psy) {
-			pr_debug("Couldn't find usb psy\n");
+			pr_err("Couldn't find usb psy\n");
 			return false;
 		}
 	}
@@ -199,7 +203,7 @@ static bool is_psy_voter_available(struct smb1390 *chip)
 	if (!chip->dc_psy) {
 		chip->dc_psy = power_supply_get_by_name("dc");
 		if (!chip->dc_psy) {
-			pr_debug("Couldn't find dc psy\n");
+			pr_err("Couldn't find dc psy\n");
 			return false;
 		}
 	}
@@ -207,7 +211,7 @@ static bool is_psy_voter_available(struct smb1390 *chip)
 	if (!chip->fcc_votable) {
 		chip->fcc_votable = find_votable("FCC");
 		if (!chip->fcc_votable) {
-			pr_debug("Couldn't find FCC votable\n");
+			pr_err("Couldn't find FCC votable\n");
 			return false;
 		}
 	}
@@ -417,6 +421,7 @@ static ssize_t die_temp_show(struct class *c, struct class_attribute *attr,
 		return -EINVAL;
 	}
 
+	pr_info("die_temp_deciC:%d\n", die_temp_deciC);
 	return snprintf(buf, PAGE_SIZE, "%d\n", die_temp_deciC / 100);
 }
 static CLASS_ATTR_RO(die_temp);
@@ -457,6 +462,7 @@ unlock:
 
 	/* ISNS = 2 * (1496 - 1390_therm_input * 0.00356) * 1000 uA */
 	isns_ma = (1496 * 1000 - div_s64((s64)temp * 3560, 1000)) * 2;
+	pr_info("temp:%d, isns_ma:%d\n", temp, isns_ma);
 	return snprintf(buf, PAGE_SIZE, "%d\n", isns_ma);
 }
 static CLASS_ATTR_RO(isns);
@@ -480,6 +486,7 @@ static int smb1390_disable_vote_cb(struct votable *votable, void *data,
 	struct smb1390 *chip = data;
 	int rc = 0;
 
+	pr_info("client:%s disable:%d\n", client, disable);
 	if (!is_psy_voter_available(chip))
 		return -EAGAIN;
 
@@ -509,6 +516,7 @@ static int smb1390_ilim_vote_cb(struct votable *votable, void *data,
 	struct smb1390 *chip = data;
 	int rc = 0;
 
+	pr_info("client:%s ilim_uA:%d\n", client, ilim_uA);
 	if (!is_psy_voter_available(chip))
 		return -EAGAIN;
 
@@ -520,10 +528,10 @@ static int smb1390_ilim_vote_cb(struct votable *votable, void *data,
 
 	/* ILIM less than 1A is not accurate; disable charging */
 	if (ilim_uA < 1000000) {
-		pr_debug("ILIM %duA is too low to allow charging\n", ilim_uA);
+		pr_info("ILIM %duA is too low to allow charging\n", ilim_uA);
 		vote(chip->disable_votable, ILIM_VOTER, true, 0);
 	} else {
-		pr_debug("setting ILIM to %duA\n", ilim_uA);
+		pr_info("setting ILIM to %duA\n", ilim_uA);
 		rc = smb1390_masked_write(chip, CORE_FTRIM_ILIM_REG,
 				CFG_ILIM_MASK,
 				DIV_ROUND_CLOSEST(ilim_uA - 500000, 100000));
@@ -711,7 +719,7 @@ static void smb1390_taper_work(struct work_struct *work)
 		if (pval.intval == POWER_SUPPLY_CHARGE_TYPE_TAPER) {
 			fcc_uA = get_client_vote(chip->fcc_votable, CP_VOTER)
 								- 100000;
-			pr_debug("taper work reducing FCC to %duA\n", fcc_uA);
+			pr_info("taper work reducing FCC to %duA\n", fcc_uA);
 			vote(chip->fcc_votable, CP_VOTER, true, fcc_uA);
 
 			if (fcc_uA < 2000000) {
@@ -820,6 +828,15 @@ static int smb1390_init_hw(struct smb1390 *chip)
 	if (rc < 0)
 		return rc;
 
+	/*
+	 * SMB-1390-0-42CWLNSP-HR-03-0-00 use 800khz for single
+	 * SMB-1390-0-42CWLNSP-HR-03-0-01 use 400khz for dual
+	 */
+	rc = smb1390_masked_write(chip, CORE_FTRIM_OSC,
+			CFG_OSC_MASK, CFG_OSC_800KHZ);
+	if (rc < 0)
+		return rc;
+
 
 	return 0;
 }
@@ -900,9 +917,13 @@ static int smb1390_probe(struct platform_device *pdev)
 	struct smb1390 *chip;
 	int rc;
 
+	pr_info("smb1390 probed enter");
 	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
-	if (!chip)
+	if (!chip) {
+		pr_err("devm_kzalloc failed\n");
 		return -ENOMEM;
+	}
+
 
 	chip->dev = &pdev->dev;
 	spin_lock_init(&chip->status_change_lock);

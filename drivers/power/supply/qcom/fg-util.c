@@ -67,6 +67,18 @@ int fg_decode_value_16b(struct fg_sram_param *sp,
 	return sp[id].value;
 }
 
+int fg_decode_value_32b(struct fg_sram_param *sp,
+				enum fg_sram_param_id id, int value)
+{
+	int64_t temp = 0;
+
+	temp = (int64_t)value * sp[id].denmtr;
+	sp[id].value = div_u64(temp, sp[id].numrtr);
+	pr_debug("id: %d raw value: %x decoded value: %x\n", id, value,
+		sp[id].value);
+	return sp[id].value;
+}
+
 int fg_decode_default(struct fg_sram_param *sp, enum fg_sram_param_id id,
 				int value)
 {
@@ -839,6 +851,26 @@ out:
 }
 
 /* All fg_get_* , fg_set_* functions here */
+static unsigned long start_jiffies = 0;
+static int fg_test_cnt = 0;
+static void debug_fg_issue_zte(void)
+{
+	if (start_jiffies == 0) {
+		start_jiffies = jiffies;
+		fg_test_cnt = 0;
+	}
+
+	if (time_before_eq(jiffies, start_jiffies + 5 * HZ)) {
+		fg_test_cnt = fg_test_cnt + 1;
+		if (fg_test_cnt == 30) {
+			pr_info("fg_get_msoc_raw, show stack:\n");
+			dump_stack();
+		}
+	} else {
+		start_jiffies = jiffies;
+		fg_test_cnt = 0;
+	}
+}
 
 int fg_get_msoc_raw(struct fg_dev *fg, int *val)
 {
@@ -865,6 +897,10 @@ int fg_get_msoc_raw(struct fg_dev *fg, int *val)
 	}
 
 	fg_dbg(fg, FG_POWER_SUPPLY, "raw: 0x%02x\n", cap[0]);
+
+	/* Add to capture the caller of this function */
+	debug_fg_issue_zte();
+
 	*val = cap[0];
 	return 0;
 }
