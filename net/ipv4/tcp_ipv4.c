@@ -74,6 +74,7 @@
 #include <net/xfrm.h>
 #include <net/secure_seq.h>
 #include <net/busy_poll.h>
+#include <net/net_log.h>
 
 #include <linux/inet.h>
 #include <linux/ipv6.h>
@@ -85,6 +86,7 @@
 #include <crypto/hash.h>
 #include <linux/scatterlist.h>
 
+extern int tcp_socket_debugfs;
 #ifdef CONFIG_TCP_MD5SIG
 static int tcp_v4_md5_hash_hdr(char *md5_hash, const struct tcp_md5sig_key *key,
 			       __be32 daddr, __be32 saddr, const struct tcphdr *th);
@@ -1631,6 +1633,7 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	bool refcounted;
 	struct sock *sk;
 	int ret;
+	kuid_t  uid;
 
 	if (skb->pkt_type != PACKET_HOST)
 		goto discard_it;
@@ -1746,6 +1749,24 @@ process:
 	ret = 0;
 	if (!sock_owned_by_user(sk)) {
 		ret = tcp_v4_do_rcv(sk, skb);
+/*ZTE_LC_TCP_DEBUG, 20170417 improved begin*/
+		if ((ret == 0) && (tcp_socket_debugfs & TCP_IP_LOG_ENABLE)) {
+			if (iph->saddr != htonl(INADDR_LOOPBACK)) {
+				uid = sk ? sk->sk_uid : GLOBAL_ROOT_UID;
+
+				if (!uid_valid(uid))
+					uid = GLOBAL_ROOT_UID;
+
+				pr_log_info("[IP] TCP RCV len=%d,uid=%d,"
+					"Gpid:%d (%s), (%pI4:%hu <- %pI4:%hu)\n",
+					ntohs(iph->tot_len),
+					uid.val,
+					current->group_leader->pid, current->group_leader->comm,
+					&iph->daddr, ntohs(th->dest),
+					&iph->saddr, ntohs(th->source));
+			}
+		}
+/*ZTE_LC_TCP_DEBUG, 20170417 improved end*/
 	} else if (tcp_add_backlog(sk, skb)) {
 		goto discard_and_relse;
 	}
