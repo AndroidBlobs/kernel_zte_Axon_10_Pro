@@ -75,7 +75,7 @@
 
 			config {
 				pins = "gpio96";
-				bias-pull-up;           /* pull up */
+				bias-disable;           /* NO pull */
 				drive-strength = <2>;   /* 2 MA */
 			};
 		};
@@ -224,6 +224,68 @@
 			};
 		};
 
+		/*added by 10225091 for fingerprint,begin*/
+		fp_shutdown_active:active{
+			mux{
+			pins = "gpio148";
+			function = "gpio";
+			};
+			config{
+			pins = "gpio148";
+			drive-strength = <8>;
+			bias-disable;
+			output-high;
+			};
+		};
+		fp_shutdown_suspend:suspend{
+			mux{
+			pins = "gpio148";
+			function = "gpio";
+			};
+			config{
+			pins = "gpio148";
+			drive-strength = <8>;
+			bias-disable;
+			output-low;
+			};
+		};
+		silead_irq_active:irq_active{
+			mux{
+			pins = "gpio118";
+			function = "gpio";
+			};
+			config{
+			pins = "gpio118";
+			drive-strength = <8>;
+			bias-pull-down;
+			};
+		};
+		goodix_pwr_active: goodix_pwr_active {
+			mux{
+			pins = "gpio131";
+			function = "gpio";
+			};
+			config {
+			pins = "gpio131";
+			drive-strength = <8>;
+			bias-disable;
+			output-high;
+			};
+		};
+		silead_pwr_active: silead_pwr_active {
+			mux{
+			pins = "gpio131";
+			function = "gpio";
+			};
+			config {
+			pins = "gpio131";
+			drive-strength = <8>;
+			bias-disable;
+			output-high;
+			};
+		};
+		/*add by 10225091 for fingerprint end*/
+
 		qupv3_se12_2uart_pins: qupv3_se12_2uart_pins {
 			qupv3_se12_2uart_active: qupv3_se12_2uart_active {
 				mux {
@@ -293,40 +355,53 @@
 			};
 		};
 
-		pmx_ts_active {
-			ts_active: ts_active {
-					mux {
-						pins = "gpio122", "gpio54";
-						function = "gpio";
-					};
-					config {
-						pins = "gpio122", "gpio54";
-						drive-strength = <8>;
-						bias-pull-up;
-					};
-			};
-		};
+		/* add pingrp for touchscreen */
+		goodix {
+			ts_int_active: ts_int_active {
+				mux {
+					pins = "gpio122";
+					function = "gpio";
+				};
 
-		pmx_ts_int_suspend {
+				config {
+					pins = "gpio122";
+					drive-strength = <8>;
+					bias-pull-up;
+				};
+			};
+
 			ts_int_suspend: ts_int_suspend {
 				mux {
 					pins = "gpio122";
 					function = "gpio";
 				};
+
 				config {
 					pins = "gpio122";
 					drive-strength = <2>;
 					bias-pull-down;
 				};
 			};
-		};
 
-		pmx_ts_reset_suspend {
+			ts_reset_active: ts_reset_active {
+				mux {
+					pins = "gpio54";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio54";
+					drive-strength = <8>;
+					bias-pull-up;
+				};
+			};
+
 			ts_reset_suspend: ts_reset_suspend {
 				mux {
 					pins = "gpio54";
 					function = "gpio";
 				};
+
 				config {
 					pins = "gpio54";
 					drive-strength = <2>;
@@ -1992,12 +2067,12 @@
 		tert_aux_pcm_dout {
 			tert_aux_pcm_dout_sleep: tert_aux_pcm_dout_sleep {
 				mux {
-					pins = "gpio131";
+					pins = "gpio36";/*131 used by fp, set to 36*/
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio131";
+					pins = "gpio36";/*131 used by fp, set to 36*/
 					drive-strength = <2>;   /* 2 mA */
 					bias-pull-down;         /* PULL DOWN */
 					input-enable;
@@ -2006,12 +2081,12 @@
 
 			tert_aux_pcm_dout_active: tert_aux_pcm_dout_active {
 				mux {
-					pins = "gpio131";
+					pins = "gpio36";/*131 used by fp, set to 36*/
 					function = "ter_mi2s";
 				};
 
 				config {
-					pins = "gpio131";
+					pins = "gpio36";/*131 used by fp, set to 36*/
 					drive-strength = <8>;   /* 8 mA */
 					bias-disable;           /* NO PULL */
 				};
@@ -2461,12 +2536,12 @@
 		tert_tdm_dout {
 			tert_tdm_dout_sleep: tert_tdm_dout_sleep {
 				mux {
-					pins = "gpio131";
+					pins = "gpio36";/*131 used by fp, set to 36*/
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio131";
+					pins = "gpio36";/*131 used by fp, set to 36*/
 					drive-strength = <2>;   /* 2 mA */
 					bias-pull-down;         /* PULL DOWN */
 					input-enable;
@@ -2475,12 +2550,12 @@
 
 			tert_tdm_dout_active: tert_tdm_dout_active {
 				mux {
-					pins = "gpio131";
+					pins = "gpio36";/*131 used by fp, set to 36*/
 					function = "ter_mi2s";
 				};
 
 				config {
-					pins = "gpio131";
+					pins = "gpio36";/*131 used by fp, set to 36*/
 					drive-strength = <8>;   /* 8 mA */
 					bias-disable;           /* NO PULL */
 				};
@@ -2988,12 +3063,12 @@
 		tert_mi2s_sd1 {
 			tert_mi2s_sd1_sleep: tert_mi2s_sd1_sleep {
 				mux {
-					pins = "gpio131";
+					pins = "gpio36";/*131 used by fp, set to 36*/
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio131";
+					pins = "gpio36";/*131 used by fp, set to 36*/
 					drive-strength = <2>;   /* 2 mA */
 					bias-pull-down;         /* PULL DOWN */
 					input-enable;
@@ -3002,12 +3077,12 @@
 
 			tert_mi2s_sd1_active: tert_mi2s_sd1_active {
 				mux {
-					pins = "gpio131";
+					pins = "gpio36";/*131 used by fp, set to 36*/
 					function = "ter_mi2s";
 				};
 
 				config {
-					pins = "gpio131";
+					pins = "gpio36";/*131 used by fp, set to 36*/
 					drive-strength = <8>;   /* 8 mA */
 					bias-disable;           /* NO PULL */
 				};
@@ -3340,12 +3415,12 @@
 		quin_mi2s_mclk {
 			quin_mi2s_mclk_sleep: quin_mi2s_mclk_sleep {
 				mux {
-					pins = "gpio148";
+					pins = "gpio37";/*148 used by fp change to 37*/
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio148";
+					pins = "gpio37";/*148 used by fp change to 37*/
 					drive-strength = <2>; /* 2 mA */
 					bias-pull-down;       /* PULL DOWN */
 				};
@@ -3353,12 +3428,12 @@
 
 			quin_mi2s_mclk_active: quin_mi2s_mclk_active {
 				mux {
-					pins = "gpio148";
+					pins = "gpio37";/*148 used by fp change to 37*/
 					function = "spkr_i2s";
 				};
 
 				config {
-					pins = "gpio148";
+					pins = "gpio37";/*148 used by fp change to 37*/
 					drive-strength = <8>; /* 8 mA */
 					bias-disable;         /* NO PULL */
 				};
@@ -4335,12 +4410,12 @@
 
 			emac_rgmii_rxd1: emac_rgmii_rxd1 {
 				mux {
-					pins = "gpio118";
+					pins = "gpio35";/*118 used by fp change to 35*/
 					function = "rgmii_rxd1";
 				};
 
 				config {
-					pins = "gpio118";
+					pins = "gpio35";/*118 used by fp change to 35*/
 					bias-disable;  /* NO pull */
 					drive-strength = <2>;
 				};

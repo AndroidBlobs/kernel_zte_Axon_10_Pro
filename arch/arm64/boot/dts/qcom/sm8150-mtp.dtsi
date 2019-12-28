@@ -15,8 +15,10 @@
 
 #include "sm8150-pmic-overlay.dtsi"
 #include "sm8150-sde-display.dtsi"
-#include "sm8150-camera-sensor-mtp.dtsi"
+//#include "sm8150-camera-sensor-mtp.dtsi"
+//#include "zte-sm8150-camera-sensor-4G.dtsi"
 #include "sm8150-thermal-overlay.dtsi"
+/*#include "touch-key-pine.dtsi"*/
 
 &qupv3_se4_i2c {
 #include "smb1390.dtsi"
@@ -79,7 +81,8 @@
 		label = "gpio-keys";
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&key_vol_up_default>;
+		pinctrl-0 = <&key_vol_up_default
+			     &key_vol_down_default>;
 
 		vol_up {
 			label = "volume_up";
@@ -90,6 +93,25 @@
 			debounce-interval = <15>;
 			linux,can-disable;
 		};
+
+		vol_down {
+			label = "volume_down";
+			gpios = <&pm8150_gpios 1 GPIO_ACTIVE_LOW>;
+			linux,input-type = <1>;
+			linux,code = <KEY_VOLUMEDOWN>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+			linux,can-disable;
+		};
+	};
+
+	hall_sensor {
+		compatible = "ah,hall_ic";
+		vddio-supply = <&pm8150l_l8>;
+		linux,min-uv = <1800000>;
+		linux,max-uv = <1800000>;
+		ah,gpio_irq = <&tlmm 121 0x00>;
+		linux,name = "hall_sensor";
 	};
 
 	qcom,qbt1000 {
@@ -100,6 +122,25 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&key_home_default>;
 		qcom,finger-detect-gpio = <&pm8150_gpios 1 0>;
+	};
+	goodix_fp {
+		status = "ok";
+		compatible = "goodix,fingerprint";
+		spi-max-frequency = <4800000>;
+		qcom,qup-id = <3>;
+		reg = <0>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <118 0x2008>;
+		pinctrl-names = "goodix_active", "goodix_suspend", "pwr_active";
+		pinctrl-0 = <&fp_shutdown_active>;
+		pinctrl-1 = <&fp_shutdown_suspend>;
+		pinctrl-2 = <&goodix_pwr_active>;
+
+		fp-gpio-reset = <&tlmm 148 0x0>;
+		fp-gpio-irq = <&tlmm 118 0x2008>;
+		goodix,gpio_pwr = <&tlmm 131 0x1>;
+		interrupt-names = "goodix_wake_up";
 	};
 };
 
@@ -231,13 +272,54 @@
 
 &dsi_nt35695b_truly_fhd_video {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
-	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-bl-min-level = <1>;
 	qcom,mdss-dsi-bl-max-level = <4095>;
 	qcom,mdss-dsi-mode-sel-gpio-state = "single_port";
 	qcom,panel-mode-gpio = <&tlmm 7 0>;
 	qcom,platform-te-gpio = <&tlmm 8 0>;
 	qcom,platform-reset-gpio = <&tlmm 6 0>;
+};
+
+&qupv3_se17_i2c { /* BLSP1 QUP3 */
+	status = "ok";
+	goodix_ts@5d {
+		compatible = "goodix,gd-ts";
+		reg = <0x5d>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <122 0x02>;
+		vdd_ana-supply = <&pm8150_l17>;
+		vcc_i2c-supply = <&pm8150_s4>;
+		goodix,reset-gpio = <&tlmm 54 0x00>;
+		goodix,irq-gpio = <&tlmm 122 0x2008>;
+		pinctrl-names = "pmx_ts_active","pmx_ts_suspend",
+						"pmx_ts_init","pmx_ts_release";
+		pinctrl-0 = <&ts_int_active>;
+		pinctrl-1 = <&ts_int_suspend>;
+		pinctrl-2 = <&ts_int_active &ts_reset_active>;
+		pinctrl-3 = <&ts_int_suspend &ts_reset_suspend>;
+	};
+};
+
+&dsi_boe_hx83112a_video {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
+	qcom,mdss-dsi-bl-min-level = <48>;
+	qcom,mdss-dsi-bl-max-level = <3071>;
+	qcom,mdss-dsi-mode-sel-gpio-state = "single_port";
+	qcom,panel-mode-gpio = <&tlmm 7 0>;
+	qcom,platform-te-gpio = <&tlmm 8 0>;
+	qcom,platform-reset-gpio = <&tlmm 6 0>;
+};
+
+
+&dsi_visionox_rm692a4_amoled_fhd_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-mode-sel-gpio-state = "single_port";
+	qcom,panel-mode-gpio = <&tlmm 7 0>;
+	qcom,platform-te-gpio = <&tlmm 8 0>;
+	qcom,platform-reset-gpio = <&tlmm 6 0>;
+	qcom,5v-boost-gpio = <&tlmm 130 0>;
 };
 
 &qupv3_se9_i2c {
@@ -249,7 +331,6 @@
 		qcom,nq-ven = <&tlmm 41 0x00>;
 		qcom,nq-firm = <&tlmm 48 0x00>;
 		qcom,nq-clkreq = <&tlmm 113 0x00>;
-		qcom,nq-esepwr = <&tlmm 42 0x00>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <47 0>;
 		interrupt-names = "nfc_irq";
@@ -258,6 +339,21 @@
 					&nfc_clk_req_active>;
 		pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend
 					&nfc_clk_req_suspend>;
+	};
+};
+
+&qupv3_se17_i2c {
+	status = "ok";
+	himax-ts@48 {
+		compatible = "himax,hxcommon";
+		reg = <0x48>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <122 0x2>;
+		himax,panel-coords = <0 1080 0 2160>;
+		himax,display-coords = <0 1080 0 2160>;
+		himax,irq-gpio = <&tlmm 122 0x00>;
+		himax,rst-gpio = <&tlmm 54 0x00>;
+		report_type = <1>;
 	};
 };
 
@@ -277,12 +373,9 @@
 	vdd-hba-supply = <&ufs_phy_gdsc>;
 	vdd-hba-fixed-regulator;
 	vcc-supply = <&pm8150_l10>;
-	vcc-voltage-level = <2504000 2950000>;
-	vcc-low-voltage-sup;
-	vccq-supply = <&pm8150_l9>;
+	vcc-voltage-level = <2950000 2960000>;
 	vccq2-supply = <&pm8150_s4>;
 	vcc-max-microamp = <750000>;
-	vccq-max-microamp = <700000>;
 	vccq2-max-microamp = <750000>;
 
 	qcom,vddp-ref-clk-supply = <&pm8150_l9>;
@@ -298,7 +391,7 @@
 &pm8150l_wled {
 	qcom,string-cfg= <7>;
 	qcom,leds-per-string = <6>;
-	status = "ok";
+	status = "disabled";
 };
 
 &pm8150l_lcdb {
@@ -310,6 +403,11 @@
 	qcom,hold-soc-while-full;
 	qcom,linearize-soc;
 	qcom,five-pin-battery;
+	qcom,fg-cutoff-voltage = <3400>;
+	qcom,fg-empty-voltage = <3000>;
+	qcom,fg-sys-term-current = <(-300)>;
+	qcom,cl-min-temp = <150>;
+	qcom,cl-max-temp = <440>;
 	/* ESR fast calibration */
 	qcom,fg-esr-timer-chg-fast = <0 7>;
 	qcom,fg-esr-timer-dischg-fast = <0 7>;
@@ -332,7 +430,7 @@
 	pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on &storage_cd>;
 	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &storage_cd>;
 
-	cd-gpios = <&tlmm 96 GPIO_ACTIVE_LOW>;
+	cd-gpios = <&tlmm 96 GPIO_ACTIVE_HIGH>;
 
 	status = "ok";
 };
@@ -643,7 +741,22 @@
 	qcom,step-charging-enable;
 	qcom,sw-jeita-enable;
 	qcom,wd-bark-time-secs = <16>;
-	qcom,suspend-input-on-debug-batt;
+	qcom,fcc-max-ua = <5000000>;
+	qcom,fv-max-uv = <4450000>;
+	qcom,usb-icl-ua = <3000000>;
+	qcom,dc-icl-ua = <1000000>;
+	qcom,chg-term-src = <1>;
+	qcom,chg-term-current-ma = <(-150)>;
+	/* external thermal-mitigation for different case
+	usb fcc @ screen off
+	usb fcc @ screen on
+	dc fcc @ screen off
+	dc fcc @ screen on */
+	qcom,thermal-mitigation
+		= <5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000
+		5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000
+		5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000
+		5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000 5000000>;
 };
 
 &smb1390 {

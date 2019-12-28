@@ -677,6 +677,7 @@
 	};
 
 	soc {
+		disable-thermal-zone;
 		polling-delay-passive = <100>;
 		polling-delay = <0>;
 		thermal-governor = "low_limits_cap";
@@ -686,7 +687,7 @@
 
 		trips {
 			soc_trip:soc-trip {
-				temperature = <10>;
+				temperature = <0>;
 				hysteresis = <0>;
 				type = "passive";
 			};

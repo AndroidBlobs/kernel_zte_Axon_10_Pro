@@ -13,6 +13,7 @@
 &mdm3 {
 	compatible = "qcom,ext-sdx50m";
 	qcom,mdm-link-info = "0305_01.01.00";
+	qcom,mdm-auto-boot;
 };
 
 &pil_modem {

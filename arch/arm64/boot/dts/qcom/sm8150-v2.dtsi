@@ -991,6 +991,41 @@
 		BW_OPP_ENTRY(1804, 4); /* 6881 MB/s */
 		BW_OPP_ENTRY(2092, 4); /* 7980 MB/s */
 	};
+
+	/*Added by 10225091 for fingerprint, begin*/
+	silead_fp {
+		status = "okay";
+		compatible = "sil,silead_fp";
+		spi-max-frequency = <4800000>;
+		qcom,qup-id = <3>;
+		reg = <0>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <118 0x2008>;
+		/*avdd-supply =<&pm660_l19>;
+		vddio-supply =<&pm660_l11>;*/
+		rst-gpios = <&tlmm 148 0x0>;
+		irq-gpios = <&tlmm 118 0x2008>;
+		avdd-gpios = <&tlmm 131 0x1>;
+		/*vddio-gpios = <&tlmm 131 0x1>;*/
+	};
+	/*silead {
+		status = "ok";
+		compatible = "silead,silead_fp";
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <118 0x0>;
+		pinctrl-names = "silead_active", "silead_suspend", "silead_irq", "pwr_active";
+		pinctrl-0 = <&fp_shutdown_active>;
+		pinctrl-1 = <&fp_shutdown_suspend>;
+		pinctrl-2 = <&silead_irq_active>;
+		pinctrl-3 = <&silead_pwr_active>;
+		silead,gpio_reset = <&tlmm 148 0>;
+		silead,gpio_irq = <&tlmm 118 0>;
+		silead,gpio_pwr = <&tlmm 131 0>;
+		interrupt-names = "sl_wake_up";
+	};*/
+	/*added by 10225091 for fingerprint, end*/
 };
 &cpu4_computemon {
 	qcom,core-dev-table =

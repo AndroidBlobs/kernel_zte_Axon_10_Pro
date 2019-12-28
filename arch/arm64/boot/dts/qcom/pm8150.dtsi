@@ -46,7 +46,7 @@
 			qcom,system-reset;
 			qcom,store-hard-reset-reason;
 
-			qcom,pon_1 {
+			pm8150_pon_1: qcom,pon_1 {
 				qcom,pon-type = <PON_POWER_ON_TYPE_KPDPWR>;
 				qcom,pull-up;
 				linux,code = <KEY_POWER>;

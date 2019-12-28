@@ -72,11 +72,12 @@
 		"MADINPUT", "MCLK",
 		"hifi amp", "LINEOUT1",
 		"hifi amp", "LINEOUT2",
+		"AMIC1", "MIC BIAS1",
 		"AMIC2", "MIC BIAS2",
 		"MIC BIAS2", "Headset Mic",
-		"AMIC3", "MIC BIAS2",
+		"AMIC3", "MIC BIAS3",
 		"MIC BIAS2", "ANCRight Headset Mic",
-		"AMIC4", "MIC BIAS2",
+		"AMIC4", "MIC BIAS3",
 		"MIC BIAS2", "ANCLeft Headset Mic",
 		"AMIC5", "MIC BIAS3",
 		"MIC BIAS3", "Handset Mic",
@@ -95,10 +96,9 @@
 		"SpkrLeft IN", "SPK1 OUT",
 		"SpkrRight IN", "SPK2 OUT";
 
+	qcom,wsa-disable;
 	qcom,msm-mbhc-hphl-swh = <1>;
 	qcom,msm-mbhc-gnd-swh = <1>;
-	qcom,msm-mbhc-hs-mic-max-threshold-mv = <1700>;
-	qcom,msm-mbhc-hs-mic-min-threshold-mv = <50>;
 	qcom,hph-en0-gpio = <&tavil_hph_en0>;
 	qcom,hph-en1-gpio = <&tavil_hph_en1>;
 	qcom,tavil-mclk-clk-freq = <9600000>;
@@ -310,6 +310,35 @@
 			qcom,max-frequency = <24000000>;
 			qcom,mem-base-addr = <0x100000>;
 		};
+	};
+};
+
+&tsif0_signals_active {
+	tsif1_clk {
+		pins = "gpio230"; /* TSIF0 CLK */
+		function = "tsif1_clk";
+	};
+	tsif1_en {
+		pins = "gpio230"; /* TSIF0 Enable */
+		function = "tsif1_en";
+	};
+	tsif1_data {
+		pins = "gpio90"; /* TSIF0 DATA */
+		function = "tsif1_data";
+	};
+	signals_cfg {
+		pins = "gpio230", "gpio230", "gpio90";
+		drive_strength = <2>;	/* 2 mA */
+		bias-pull-down;		/* pull down */
+	};
+};
+
+&tsif0_sync_active {
+	tsif1_sync {
+		pins = "gpio230";	/* TSIF0 SYNC */
+		function = "tsif1_sync";
+		drive_strength = <2>;	/* 2 mA */
+		bias-pull-down;		/* pull down */
 	};
 };
 

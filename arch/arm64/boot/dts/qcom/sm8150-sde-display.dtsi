@@ -32,6 +32,8 @@
 #include "dsi-panel-sw43404-amoled-dsc-wqhd-video.dtsi"
 #include "dsi-panel-sw43404-amoled-dsc-fhd-plus-cmd.dtsi"
 #include "dsi-panel-nt36850-truly-dualmipi-wqhd-cmd.dtsi"
+#include "dsi-panel-zte-boe-hx83112a-6p3-1080p-video.dtsi"
+#include "dsi-panel-zte-visionox-rm692a4-6p5-amoled-fhd-plus-cmd.dtsi"
 #include <dt-bindings/clock/mdss-10nm-pll-clk.h>
 
 &tlmm {
@@ -130,7 +132,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 		regulator-enable-ramp-delay = <233>;
-		gpio = <&tlmm 130 0>;
+		/*gpio = <&tlmm 10 0>;*/
 		enable-active-high;
 		regulator-boot-on;
 		pinctrl-names = "default";
@@ -358,39 +360,27 @@
 		qcom,dsi-panel = <&dsi_dual_nt36850_truly_cmd>;
 	};
 
-	dsi_nt35695b_truly_fhd_cmd_sec_display: qcom,dsi-display@20 {
-		label = "dsi_nt35695b_truly_fhd_cmd_display";
-		qcom,display-type = "secondary";
 
-		qcom,dsi-ctrl-num = <1>;
-		qcom,dsi-phy-num = <1>;
-		qcom,dsi-select-clocks = "mux_byte_clk1", "mux_pixel_clk1";
+	dsi_boe_hx83112a_video_display: qcom,dsi-display@20 {
+		label = "dsi_boe_hx83112a_video_display";
+		qcom,display-type = "primary";
 
-		qcom,dsi-panel = <&dsi_nt35695b_truly_fhd_cmd>;
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
 
+		qcom,dsi-panel = <&dsi_boe_hx83112a_video>;
 	};
 
-	dsi_nt35695b_truly_fhd_video_sec_display: qcom,dsi-display@21 {
-		label = "dsi_nt35695b_truly_fhd_video_display";
-		qcom,display-type = "secondary";
+	dsi_visionox_rm692a4_amoled_fhd_cmd_display: qcom,dsi-display@21 {
+		label = "dsi_visionox_rm692a4_amoled_fhd_cmd_display";
+		qcom,display-type = "primary";
 
-		qcom,dsi-ctrl-num = <1>;
-		qcom,dsi-phy-num = <1>;
-		qcom,dsi-select-clocks = "mux_byte_clk1", "mux_pixel_clk1";
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
 
-		qcom,dsi-panel = <&dsi_nt35695b_truly_fhd_video>;
-	};
-
-	dsi_sim_sec_hd_cmd_display: qcom,dsi-display@22 {
-
-		label = "dsi_sim_sec_hd_cmd_display";
-		qcom,display-type = "secondary";
-
-		qcom,dsi-ctrl-num = <1>;
-		qcom,dsi-phy-num = <1>;
-		qcom,dsi-select-clocks = "mux_byte_clk1", "mux_pixel_clk1";
-
-		qcom,dsi-panel = <&dsi_sim_sec_hd_cmd>;
+		qcom,dsi-panel = <&dsi_visionox_rm692a4_amoled_fhd_cmd>;
 	};
 
 	sde_dsi: qcom,dsi-display-primary {
@@ -439,6 +429,8 @@
 			&dsi_nt35695b_truly_fhd_video_display
 			&dsi_sw43404_amoled_video_display
 			&dsi_sw43404_amoled_fhd_plus_cmd_display
+			&dsi_boe_hx83112a_video_display
+			&dsi_visionox_rm692a4_amoled_fhd_cmd_display
 			&dsi_dual_nt36850_truly_cmd_display>;
 	};
 
@@ -469,9 +461,8 @@
 		vdd-supply = <&display_panel_avdd_eldo>;
 
 		qcom,dsi-display-list =
-			<&dsi_nt35695b_truly_fhd_cmd_sec_display
-			&dsi_nt35695b_truly_fhd_video_sec_display
-			&dsi_sim_sec_hd_cmd_display>;
+			<&dsi_nt35695b_truly_fhd_cmd_display
+			&dsi_nt35695b_truly_fhd_video_display>;
 	};
 
 	sde_wb: qcom,wb-display@0 {
@@ -627,12 +618,39 @@
 };
 
 &dsi_nt35695b_truly_fhd_video {
+	qcom,mdss-dsi-t-clk-pre = <0x10>;
+	qcom,mdss-dsi-t-clk-post = <0x14>;
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings = [00 11 04 04 1E 1E
+				04 04 02 02 04 00 10 14];
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&dsi_boe_hx83112a_video {
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			qcom,mdss-dsi-panel-phy-timings = [00 1e 08 07 24 22
 				08 08 05 02 04 00 19 17];
 			qcom,display-topology = <1 0 1>;
 			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&dsi_visionox_rm692a4_amoled_fhd_cmd {
+	qcom,mdss-dsi-t-clk-pre = <0x1D>;
+	qcom,mdss-dsi-t-clk-post = <0x19>;
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings = [00 23 09 09 26 24
+				09 09 06 02 04 00 1D 19];
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+			qcom,mdss-dsi-panel-clockrate = <1050000000>;
 		};
 	};
 };
