@@ -69,4 +69,14 @@ config MDM_DBG_REQ_ENG
 	  the external modem. Allows for debugging of IPC mechanism
 	  between the external modem and the primary soc.
 
+config ESOC_PON_FAIL_ZTE
+	tristate "ZTE Patch for esoc mdm pon fail processing"
+	default n
+	depends on ESOC_MDM_DRV
+	---help---
+	  ESOC has a little probability it cannot recover from the
+	  pon fail case during power on process. So not only soft reset
+	  and retrying again and again, but also hard reset and even panic.
+
+	  If unsure, say N.
 endif

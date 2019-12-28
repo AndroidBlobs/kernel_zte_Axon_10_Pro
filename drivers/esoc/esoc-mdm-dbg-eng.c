@@ -336,6 +336,27 @@ int register_dbg_req_eng(struct esoc_clink *clink, struct device_driver *d)
 }
 #endif
 
+#ifdef CONFIG_ESOC_PON_FAIL_ZTE /* zte_5g_pon add */
+extern unsigned int zte_esoc_get_powerup_cnt(void);
+extern unsigned int zte_esoc_get_power_succ_cnt(void);
+extern unsigned int zte_esoc_get_panic_cnt(void);
+extern unsigned int zte_esoc_get_max_cnt(void);
+static ssize_t last_boot_stats_show(struct device_driver *drv, char *buf)
+{
+	size_t count;
+
+	count = snprintf(buf, PAGE_SIZE,
+		"powerup %d, power succ %d, tries %d, %d,\n",
+		zte_esoc_get_powerup_cnt(),
+		zte_esoc_get_power_succ_cnt(),
+		zte_esoc_get_panic_cnt(),
+		zte_esoc_get_max_cnt());
+
+	return count;
+}
+static DRIVER_ATTR_RO(last_boot_stats);
+#endif
+
 int mdm_dbg_eng_init(struct esoc_drv *esoc_drv,
 			struct esoc_clink *clink)
 {
@@ -352,6 +373,15 @@ int mdm_dbg_eng_init(struct esoc_drv *esoc_drv,
 		pr_err("Unable to create notify mask file\n");
 		goto notify_mask_err;
 	}
+
+#ifdef CONFIG_ESOC_PON_FAIL_ZTE /* zte_5g_pon add */
+	ret = driver_create_file(drv, &driver_attr_last_boot_stats);
+	if (ret) {
+		pr_err("Unable to create last boot stats file\n");
+		goto last_stats_err;
+	}
+#endif
+
 	ret = register_dbg_req_eng(clink, drv);
 	if (ret) {
 		pr_err("Failed to register esoc dbg req eng\n");
@@ -359,6 +389,10 @@ int mdm_dbg_eng_init(struct esoc_drv *esoc_drv,
 	}
 	return 0;
 dbg_req_fail:
+#ifdef CONFIG_ESOC_PON_FAIL_ZTE /* zte_5g_pon add */
+	driver_remove_file(drv, &driver_attr_last_boot_stats);
+last_stats_err:
+#endif
 	driver_remove_file(drv, &driver_attr_notifier_mask);
 notify_mask_err:
 	driver_remove_file(drv, &driver_attr_command_mask);

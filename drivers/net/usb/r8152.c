@@ -4188,6 +4188,9 @@ static void r8153b_init(struct r8152 *tp)
 	/* U1/U2/L1 idle timer. 500 us */
 	ocp_write_word(tp, MCU_TYPE_USB, USB_U1U2_TIMER, 500);
 
+	/* LED set to 0x0870 */
+	ocp_write_word(tp, MCU_TYPE_PLA, PLA_LEDSEL, 0x0870);
+
 	r8153b_power_cut_en(tp, false);
 	r8153b_ups_en(tp, false);
 	r8153b_queue_wake(tp, false);

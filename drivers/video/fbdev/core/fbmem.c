@@ -51,6 +51,7 @@ EXPORT_SYMBOL(registered_fb);
 
 int num_registered_fb __read_mostly;
 EXPORT_SYMBOL(num_registered_fb);
+int tp_update_firmware_flag = 0;
 
 static struct fb_info *get_fb_info(unsigned int idx)
 {

@@ -19,11 +19,87 @@
 #include "esoc-mdm.h"
 #include "mdm-dbg.h"
 
+#ifdef CONFIG_ESOC_PON_FAIL_ZTE /* zte_5g_pon add */
+#define ESOC_DEF_PON_REQ	6
+#define ZTE_ACTION_RETRY_THRESHOLD	2
+#define ZTE_ACTION_COLD_THRESHOLD	4
+#define ZTE_ACTION_PANIC_THRESHOLD	6
+
+/* do once every 10 retries */
+#define ZTE_ACTION_COLD_RATIO 10
+#else
 /* Default number of powerup trial requests per session */
-#define ESOC_DEF_PON_REQ	3
+#define ESOC_DEF_PON_REQ	2
+#endif
+
+static unsigned int n_pon_tries = ESOC_DEF_PON_REQ;
+module_param(n_pon_tries, uint, 0644);
+MODULE_PARM_DESC(n_pon_tries,
+"Number of power-on retrials allowed upon boot failure");
+
+#ifdef CONFIG_ESOC_PON_FAIL_ZTE /* zte_5g_pon add */
+static unsigned int zte_esoc_powerup_count = 0;
+static unsigned int zte_esoc_power_succ_count = 0;
+static unsigned int zte_esoc_max_count = 0;
+static unsigned int zte_esoc_panic_count = 0;
+unsigned int zte_esoc_get_powerup_cnt(void)
+{
+	return zte_esoc_powerup_count;
+}
+unsigned int zte_esoc_get_power_succ_cnt(void)
+{
+	return zte_esoc_power_succ_count;
+}
+void zte_esoc_inc_powerup_cnt(void)
+{
+	zte_esoc_powerup_count += 1;
+}
+void zte_esoc_inc_power_succ_cnt(void)
+{
+	zte_esoc_power_succ_count += 1;
+}
+
+unsigned int zte_esoc_get_panic_cnt(void)
+{
+	return zte_esoc_panic_count;
+}
+unsigned int zte_esoc_get_max_cnt(void)
+{
+	return zte_esoc_max_count;
+}
+void zte_esoc_add_panic_cnt(unsigned int cnt)
+{
+	zte_esoc_panic_count += cnt;
+	if (zte_esoc_max_count < zte_esoc_panic_count)
+		zte_esoc_max_count = zte_esoc_panic_count;
+}
+void zte_esoc_reset_panic_cnt(void)
+{
+	zte_esoc_panic_count = 0;
+}
+bool zte_esoc_check_cold_action(void)
+{
+	esoc_mdm_log("Panic count: %d\n", zte_esoc_panic_count);
+	return (zte_esoc_panic_count%ZTE_ACTION_COLD_RATIO == 0);
+}
+
+/* Returns 0 to proceed towards another retry, or an error code to quit */
+static int zte_esoc_trigger_engine_to_fail(struct esoc_clink *esoc_clink)
+{
+	struct mdm_ctrl *mdm = get_esoc_clink_data(esoc_clink);
+
+	esoc_mdm_log("Trigger mdm_helper to return\n");
+	mdm_power_down(mdm);
+	return 0;
+}
+#endif
+
+static unsigned int boot_fail_action = BOOT_FAIL_ACTION_PANIC;
+module_param(boot_fail_action, uint, 0644);
+MODULE_PARM_DESC(boot_fail_action,
+"Actions: 0:Retry PON; 1:Cold reset; 2:Power-down; 3:APQ Panic; 4:No action");
 
 #define ESOC_MAX_PON_TRIES	5
-
 #define BOOT_FAIL_ACTION_DEF BOOT_FAIL_ACTION_PANIC
 
 enum esoc_pon_state {
@@ -390,7 +466,16 @@ static int mdm_handle_boot_fail(struct esoc_clink *esoc_clink, u8 *pon_trial)
 		break;
 	case BOOT_FAIL_ACTION_PANIC:
 		esoc_mdm_log("Calling panic!!\n");
-		panic("Panic requested on external modem boot failure\n");
+		/*panic("Panic requested on external modem boot failure\n");*/
+#ifdef CONFIG_ESOC_PON_FAIL_ZTE /* zte_5g_pon add */
+		zte_esoc_add_panic_cnt(1); /* increment 1 */
+		if (zte_esoc_check_cold_action()) {
+			/* copy cold reset except pon trial */
+			mdm_subsys_retry_powerup_cleanup(esoc_clink);
+			esoc_mdm_log("Cold reset for panic\n");
+			mdm_power_down(mdm);
+		}
+#endif
 		break;
 	case BOOT_FAIL_ACTION_NOP:
 		esoc_mdm_log("Leaving the modem in its curent state\n");
@@ -418,6 +503,10 @@ static int mdm_subsys_powerup(const struct subsys_desc *crashed_subsys)
 	u8 pon_trial = 0;
 
 	esoc_mdm_log("Powerup request from SSR\n");
+#ifdef CONFIG_ESOC_PON_FAIL_ZTE /* zte_5g_pon add */
+	zte_esoc_reset_panic_cnt();
+	zte_esoc_inc_powerup_cnt();
+#endif
 
 	do {
 		esoc_mdm_log("Boot trial: %d\n", pon_trial);
@@ -469,11 +558,22 @@ static int mdm_subsys_powerup(const struct subsys_desc *crashed_subsys)
 		 * about boot failure. Prevent going to wait forever in such
 		 * case.
 		 */
-		if (esoc_clink->auto_boot)
-			timeout = 10 * HZ;
+		timeout = 120 * HZ;
 		esoc_mdm_log(
-		"Modem turned-on. Waiting for pon_done notification..\n");
+		"Modem turned-on. Waiting for pon_done notification,timeout=%d ..\n", timeout/HZ);
 		ret = wait_for_completion_timeout(&mdm_drv->pon_done, timeout);
+		#ifdef CONFIG_ESOC_PON_FAIL_ZTE /* zte_5g_pon add */
+		if (mdm_drv->pon_state != PON_FAIL && ret <= 0) {
+			/* timeout and engine stucked */
+			dev_err(&esoc_clink->dev, "booting timeout\n");
+			esoc_mdm_log("booting timeout\n");
+			/* 300ms delay below */
+			zte_esoc_trigger_engine_to_fail(esoc_clink);
+			/* Again, wait engine to return */
+			ret = wait_for_completion_timeout(
+				&mdm_drv->pon_done, timeout);
+		}
+		#endif
 		if (mdm_drv->pon_state == PON_FAIL || ret <= 0) {
 			dev_err(&esoc_clink->dev, "booting failed\n");
 			esoc_mdm_log("booting failed\n");
@@ -486,6 +586,9 @@ static int mdm_subsys_powerup(const struct subsys_desc *crashed_subsys)
 			pon_trial++;
 			mdm_subsys_retry_powerup_cleanup(esoc_clink);
 		} else if (mdm_drv->pon_state == PON_SUCCESS) {
+#ifdef CONFIG_ESOC_PON_FAIL_ZTE /* zte_5g_pon add */
+			zte_esoc_inc_power_succ_cnt();
+#endif
 			break;
 		}
 	} while (pon_trial <= atomic_read(&mdm_drv->n_pon_tries));

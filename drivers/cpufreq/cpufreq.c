@@ -642,6 +642,8 @@ static int cpufreq_parse_governor(char *str_governor, unsigned int *policy,
 	return err;
 }
 
+
+
 /**
  * cpufreq_per_cpu_attr_read() / show_##file_name() -
  * print out cpufreq information
@@ -649,6 +651,8 @@ static int cpufreq_parse_governor(char *str_governor, unsigned int *policy,
  * Write out information from cpufreq_driver->policy[cpu]; object must be
  * "unsigned int".
  */
+
+
 
 #define show_one(file_name, object)			\
 static ssize_t show_##file_name				\

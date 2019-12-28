@@ -1767,6 +1767,12 @@ config MFD_STW481X
 	  in various ST Microelectronics and ST-Ericsson embedded
 	  Nomadik series.
 
+#bsp add for aw9523 led
+config MFD_AW9523B
+	tristate "chip AW9523B support"
+	select MFD_CORE
+	default n
+
 config MFD_STM32_LPTIMER
 	tristate "Support for STM32 Low-Power Timer"
 	depends on (ARCH_STM32 && OF) || COMPILE_TEST

@@ -553,6 +553,13 @@ config QPNP_MISC
 	  and the driver provides an API to check if this interrupt
 	  is available on the current PMIC chip.
 
+config SAFECHIP_VEB_A5
+	tristate "safechip zyitong veb A5"
+	depends on SPI
+	default n
+	help
+	  This driver provides support for safechip zyitong veb A5 devices.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
@@ -577,3 +584,7 @@ config OKL4_LINK_SHBUF
 	      transport. This driver presents the link to Linux as a character device
 	      which can be written to or read from to access the shared memory. An ioctl
 	      on the device is used to send a virtual interrupt to the partner cell.
+
+config ZTE_NET_CARD_POWER_CTRL_GPIO
+	bool "powerctrl by gpio for net card"
+	default n

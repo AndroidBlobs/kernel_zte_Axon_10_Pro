@@ -373,7 +373,7 @@ static int select_xfer_mode(struct spi_master *spi,
 				struct spi_message *spi_msg)
 {
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
-	int mode = SE_DMA;
+	int mode = FIFO_MODE;
 	int fifo_disable = (geni_read_reg(mas->base, GENI_IF_FIFO_DISABLE_RO) &
 							FIFO_IF_DISABLE);
 	bool dma_chan_valid =
@@ -387,10 +387,10 @@ static int select_xfer_mode(struct spi_master *spi,
 	 */
 	if (fifo_disable && !dma_chan_valid)
 		mode = -EINVAL;
-	else if (!fifo_disable)
-		mode = SE_DMA;
 	else if (dma_chan_valid)
 		mode = GSI_DMA;
+	else
+		mode = FIFO_MODE;
 	return mode;
 }
 
