@@ -48,7 +48,7 @@ static const struct of_device_id msm_match_table[] = {
 MODULE_DEVICE_TABLE(of, msm_match_table);
 
 #define DEV_COUNT	1
-#define DEVICE_NAME	"nq-nci"
+#define DEVICE_NAME	"pn5xx"
 #define CLASS_NAME	"nqx"
 #define MAX_BUFFER_SIZE			(320)
 #define WAKEUP_SRC_TIMEOUT		(2000)
@@ -1428,11 +1428,17 @@ static int nqx_suspend(struct device *device)
 {
 	struct i2c_client *client = to_i2c_client(device);
 	struct nqx_dev *nqx_dev = i2c_get_clientdata(client);
+	int r = 0;
 
 	if (device_may_wakeup(&client->dev) && nqx_dev->irq_enabled) {
 		if (!enable_irq_wake(client->irq))
 			nqx_dev->irq_wake_up = true;
 	}
+	r = nqx_clock_deselect(nqx_dev);
+	if (r < 0)
+		dev_err(&nqx_dev->client->dev, "unable to disable clock\n");
+
+	nqx_dev->nfc_ven_enabled = false;
 	return 0;
 }
 
@@ -1440,11 +1446,17 @@ static int nqx_resume(struct device *device)
 {
 	struct i2c_client *client = to_i2c_client(device);
 	struct nqx_dev *nqx_dev = i2c_get_clientdata(client);
+	int r = 0;
 
 	if (device_may_wakeup(&client->dev) && nqx_dev->irq_wake_up) {
 		if (!disable_irq_wake(client->irq))
 			nqx_dev->irq_wake_up = false;
 	}
+	r = nqx_clock_select(nqx_dev);
+	if (r < 0)
+		dev_err(&nqx_dev->client->dev, "unable to enable clock\n");
+
+	nqx_dev->nfc_ven_enabled = true;
 	return 0;
 }
 
