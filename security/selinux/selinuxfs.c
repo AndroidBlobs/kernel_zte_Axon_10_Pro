@@ -41,6 +41,12 @@
 #include "objsec.h"
 #include "conditional.h"
 
+/* Preproc/postproc policy as binary image */
+#if defined(CONFIG_SECURITY_SELINUX_POLICYPROC)
+#include "ss/policyproc.h"
+#include <soc/qcom/vendor/vendor_cfg_helper.h>
+#endif /* CONFIG_SECURITY_SELINUX_POLICYPROC */
+
 unsigned int selinux_checkreqprot = CONFIG_SECURITY_SELINUX_CHECKREQPROT_VALUE;
 
 static int __init checkreqprot_setup(char *str)
@@ -369,6 +375,16 @@ static int sel_open_policy(struct inode *inode, struct file *filp)
 	if (rc)
 		goto err;
 
+/* Preproc/postproc policy as binary image */
+#if defined(CONFIG_SECURITY_SELINUX_POLICYPROC)
+	if (request_privilege_state()) {
+		rc = pp_postproc_policy(&plm->data, &plm->len);
+		if (rc) {
+			goto err;
+		}
+	}
+#endif /* CONFIG_SECURITY_SELINUX_POLICYPROC */
+
 	policy_opened = 1;
 
 	filp->private_data = plm;
@@ -499,6 +515,15 @@ static ssize_t sel_write_load(struct file *file, const char __user *buf,
 	length = -EFAULT;
 	if (copy_from_user(data, buf, count) != 0)
 		goto out;
+
+/* Preproc/postproc policy as binary image */
+#if defined(CONFIG_SECURITY_SELINUX_POLICYPROC)
+	if (request_privilege_state()) {
+		if (pp_preproc_policy(&data, &count) != 0) {
+			goto out;
+		}
+	}
+#endif /* CONFIG_SECURITY_SELINUX_POLICYPROC */
 
 	length = security_load_policy(data, count);
 	if (length) {
