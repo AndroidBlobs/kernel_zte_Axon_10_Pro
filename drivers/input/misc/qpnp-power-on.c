@@ -27,11 +27,17 @@
 #include <linux/power_supply.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
-#include <linux/spmi.h>
+#include <linux/msm_spmi.h>
 #include <linux/input/qpnp-power-on.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
+#include <soc/qcom/restart.h>
+#include <linux/of_platform.h>
+#include <linux/of_address.h>
+#include <linux/reboot.h>
+#include <soc/qcom/socinfo.h>
+#include <linux/gpio.h>
 
 #define PMIC_VER_8941				0x01
 #define PMIC_VERSION_REG			0x0105
@@ -228,6 +234,11 @@ struct qpnp_pon {
 	bool			kpdpwr_dbc_enable;
 	bool			resin_pon_reset;
 	ktime_t			kpdpwr_last_release_time;
+	struct spmi_device	*spmi;
+	/*ZTE ADD for BOOT_MODE start*/
+	struct timer_list       timer;
+	struct work_struct      pwrkey_poweroff_work;
+	/*ZTE ADD for BOOT_MODE end*/
 };
 
 static int pon_ship_mode_en;
@@ -305,6 +316,24 @@ static const char * const qpnp_poff_reason[] = {
 	[39] = "Triggered from S3_RESET_KPDPWR_ANDOR_RESIN",
 };
 
+#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+static int
+qpnp_pon_masked_read(struct qpnp_pon *pon, u16 addr)
+{
+	int rc;
+	u8 reg;
+
+	rc = spmi_ext_register_readl(pon->spmi->ctrl, pon->spmi->sid,
+							addr, &reg, 1);
+	if (rc) {
+		dev_err(&pon->spmi->dev,
+			"Unable to read from addr=%hx, rc(%d)\n",
+			addr, rc);
+		return rc;
+	}
+	return reg;
+}
+#endif
 static int
 qpnp_pon_masked_write(struct qpnp_pon *pon, u16 addr, u8 mask, u8 val)
 {
@@ -338,7 +367,25 @@ static bool is_pon_gen2(struct qpnp_pon *pon)
 	return pon->subtype == PON_GEN2_PRIMARY ||
 		pon->subtype == PON_GEN2_SECONDARY;
 }
+#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+int qpnp_pon_read_restart_reason(void)
+{
+	int rc = 0;
+	struct qpnp_pon *pon = sys_reset_dev;
 
+	if (!pon)
+		return 0;
+	if (!pon->store_hard_reset_reason)
+		return 0;
+	rc = qpnp_pon_masked_read(pon, QPNP_PON_SOFT_RB_SPARE(pon));
+	if (rc)
+		dev_err(&pon->spmi->dev,
+				"qpnp pon read to addr=%x, rc(%d)\n",
+				QPNP_PON_SOFT_RB_SPARE(pon), rc);
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_pon_read_restart_reason);
+#endif
 /**
  * qpnp_pon_set_restart_reason() - Store device restart reason in PMIC register
  *
@@ -839,6 +886,80 @@ static int qpnp_pon_store_and_clear_warm_reset(struct qpnp_pon *pon)
 	return 0;
 }
 
+/*ZTE ADD for BOOT_MODE start*/
+#define PM_GPIO_1 1274
+#define PM_GPIO_6 1277
+#define SCM_DLOAD_FULLDUMP 0x10
+extern int scm_set_dload_mode(int arg1, int arg2);
+static void vendor_mod_ponreg(struct qpnp_pon *pon)
+{
+	pr_info("%s: modify s2 warm reset\n", __func__);
+	qpnp_pon_masked_write(pon, QPNP_PON_KPDPWR_S2_CNTL(pon),
+								QPNP_PON_S2_CNTL_TYPE_MASK,
+								(u8)PON_POWER_OFF_TYPE_WARM_RESET);
+}
+
+static bool vendor_volkeys_pressed(void)
+{
+	int val1;
+	int val2;
+
+	gpio_direction_input(PM_GPIO_1);
+
+	val1 = !gpio_get_value(PM_GPIO_1);
+
+	gpio_direction_input(PM_GPIO_6);
+
+	val2 = !gpio_get_value(PM_GPIO_6);
+
+	pr_info("%s: vol down %d, vol up %d\n", __func__, val1, val2);
+
+	return val1 && val2;
+}
+
+static void pwrkey_timer(unsigned long data)
+{
+	struct qpnp_pon *pon = (struct qpnp_pon *)data;
+
+	schedule_work(&pon->pwrkey_poweroff_work);
+}
+
+static void pwrkey_poweroff(struct work_struct *work)
+{
+	int ret;
+	struct qpnp_pon *pon = container_of(work, struct qpnp_pon, pwrkey_poweroff_work);
+
+	if (vendor_volkeys_pressed()) {
+		pr_info("%s: power key long pressed, trigger s2 warm reset\n", __func__);
+		ret = scm_set_dload_mode(SCM_DLOAD_FULLDUMP, 0);
+		if (ret)
+			pr_err("Failed to set secure DLOAD mode: %d\n", ret);
+		vendor_mod_ponreg(pon);
+	} else {
+		pr_info("%s: power key long pressed, trigger kernel reboot\n", __func__);
+		kernel_restart("LONGPRESS");
+	}
+}
+
+extern int socinfo_get_ftm_flag(void);
+void zte_set_timer(struct qpnp_pon *pon)
+{
+	if (socinfo_get_ftm_flag() == 1) {
+		pon->timer.expires = jiffies + 3 * HZ;
+		pr_info("%s: FTM mode,start 3s timer for reboot\n", __func__);
+	} else {
+		#ifdef CONFIG_ZTE_PWRKEY_HARDRESET_TIMEOUT
+			pon->timer.expires = jiffies + CONFIG_ZTE_PWRKEY_HARDRESET_TIMEOUT * HZ;
+			pr_info("%s: Normal mode,start 16s timer for reboot\n", __func__);
+		#else
+			pon->timer.expires = jiffies + 10 * HZ;
+			pr_info("%s: Normal mode,start 10s timer for reboot\n", __func__);
+		#endif
+	}
+	mod_timer(&pon->timer, pon->timer.expires);
+}
+/*ZTE ADD for BOOT_MODE end*/
+
 static struct qpnp_pon_config *qpnp_get_cfg(struct qpnp_pon *pon, u32 pon_type)
 {
 	int i;
@@ -922,6 +1043,12 @@ static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 
 	cfg->old_state = !!key_status;
 
+/*ZTE ADD for BOOT_MODE start*/
+	if ((cfg->pon_type == PON_KPDPWR) && key_status)
+		zte_set_timer(pon);
+	else
+		del_timer(&pon->timer);
+/*ZTE ADD for BOOT_MODE end*/
 	return 0;
 }
 
@@ -1471,6 +1598,10 @@ static int qpnp_pon_config_parse_reset_info(struct qpnp_pon *pon,
 					    struct device_node *node)
 {
 	int rc;
+	void __iomem *s2_reset_type_addr;
+	uint s2_reset_type;
+	struct device_node *imem_node = NULL;
+
 
 	if (!cfg->support_reset)
 		return 0;
@@ -1506,6 +1637,24 @@ static int qpnp_pon_config_parse_reset_info(struct qpnp_pon *pon,
 		dev_err(pon->dev, "Unable to read s2-type, rc=%d\n", rc);
 		return rc;
 	}
+
+	imem_node = of_find_compatible_node(NULL, NULL, "qcom,msm-imem-s2_reset_type");
+	if (imem_node) {
+		s2_reset_type_addr = of_iomap(imem_node, 0);
+		if (s2_reset_type_addr) {
+			s2_reset_type = __raw_readl(s2_reset_type_addr);
+			pr_info("qcom,msm-imem-reset_type: %d\n", s2_reset_type);
+			if (s2_reset_type) {
+				cfg->s1_timer = s1_delay[PON_S1_COUNT_MAX-1];
+				cfg->s2_type = PON_POWER_OFF_WARM_RESET;
+			}
+		} else {
+			pr_err("unable to map imem qcom,msm-imem-reset_type offset\n");
+		}
+	} else {
+		pr_err("unable to find DT imem nide: qcom,msm-imem-reset_type\n");
+	}
+
 	if (cfg->s2_type > QPNP_PON_RESET_TYPE_MAX) {
 		dev_err(pon->dev, "Invalid reset type specified %u\n",
 			cfg->s2_type);
@@ -1912,6 +2061,78 @@ static void qpnp_pon_debugfs_remove(struct qpnp_pon *pon)
 {}
 #endif
 
+/*****************hww add power reason node start*******************/
+#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+int zte_poweron_reason;
+int zte_poweroff_reason;
+extern int zte_power_panic;
+static ssize_t zte_poweron_reason_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int ret = 0;
+
+	if (zte_poweron_reason >= 0 && zte_poweron_reason < ARRAY_SIZE(qpnp_pon_reason)) {
+		ret = snprintf(buf, 64, "%s\n", qpnp_pon_reason[zte_poweron_reason]);
+	} else {
+		ret = snprintf(buf, 64, "ZTE Power-on reason mismatch\n");
+	}
+	return ret;
+}
+static ssize_t zte_poweroff_reason_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int retval = 0;
+
+	if (zte_poweroff_reason >= 0 && zte_poweroff_reason < ARRAY_SIZE(qpnp_poff_reason)) {
+		retval = snprintf(buf, 64, "%s\n", qpnp_poff_reason[zte_poweroff_reason]);
+	} else {
+		retval = snprintf(buf, 64, "ZTE Power-off reason mismatch\n");
+	}
+	return retval;
+}
+static ssize_t zte_restart_reason_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int retvalue = 0;
+
+	if (zte_power_panic == PON_RESTART_REASON_PANIC) {
+		retvalue = snprintf(buf, 64, "ZTE Power-restart from Panic !\n");
+	} else {
+		retvalue = snprintf(buf, 64, "ZTE Power-restart Normal !\n");
+	}
+	return retvalue;
+}
+static DEVICE_ATTR(zte_poweron_reason, 0664,  zte_poweron_reason_show, NULL);
+static DEVICE_ATTR(zte_poweroff_reason, 0664,  zte_poweroff_reason_show, NULL);
+static DEVICE_ATTR(zte_restart_reason, 0664,  zte_restart_reason_show, NULL);
+static struct attribute *zte_power_reason_attributes[] = {
+	&dev_attr_zte_poweron_reason.attr,
+	&dev_attr_zte_poweroff_reason.attr,
+	&dev_attr_zte_restart_reason.attr,
+		NULL,
+};
+static struct attribute_group zte_power_reason_attribute_group = {
+	.attrs = zte_power_reason_attributes
+};
+int zte_power_reason_debug_func(void)
+{
+	int err = 0;
+	struct kobject *zte_power_reason_kobj;
+
+	zte_power_reason_kobj = kobject_create_and_add("power_reason", NULL);
+	if (!zte_power_reason_kobj) {
+		err = -EINVAL;
+		pr_info("%s() - ERROR Unable to create zte_power_reason_kobj.\n", __func__);
+		return -EIO;
+	}
+	err = sysfs_create_group(zte_power_reason_kobj, &zte_power_reason_attribute_group);
+	if (err != 0) {
+		pr_info("%s - ERROR zte_power_reason_kobj failed.\n", __func__);
+		kobject_put(zte_power_reason_kobj);
+		return -EIO;
+	}
+	pr_info("%s succeeded.\n", __func__);
+	return err;
+}
+#endif
+/*****************hww add power reason node end*******************/
 static int qpnp_pon_read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 					int *reason_index_offset)
 {
@@ -2063,6 +2284,9 @@ static int qpnp_pon_read_hardware_info(struct qpnp_pon *pon, bool sys_reset)
 	if (sys_reset)
 		boot_reason = ffs(pon_sts);
 
+#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+	zte_poweron_reason = ffs(pon_sts) - 1;
+#endif
 	index = ffs(pon_sts) - 1;
 	cold_boot = sys_reset_dev ? !_qpnp_pon_is_warm_reset(sys_reset_dev)
 				  : !_qpnp_pon_is_warm_reset(pon);
@@ -2094,6 +2318,9 @@ static int qpnp_pon_read_hardware_info(struct qpnp_pon *pon, bool sys_reset)
 		}
 		poff_sts = buf[0] | (buf[1] << 8);
 	}
+#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+	zte_poweroff_reason  = ffs(poff_sts) - 1 + reason_index_offset;
+#endif
 	index = ffs(poff_sts) - 1 + reason_index_offset;
 	if (index >= ARRAY_SIZE(qpnp_poff_reason) || index < 0) {
 		dev_info(dev, "PMIC@SID%d: Unknown power-off reason\n",
@@ -2290,6 +2517,13 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		pon->is_spon = true;
 	}
 
+	/*ZTE ADD for BOOT_MODE start*/
+	init_timer(&pon->timer);
+	pon->timer.data = (unsigned long)pon;
+	pon->timer.function = pwrkey_timer;
+	INIT_WORK(&pon->pwrkey_poweroff_work, pwrkey_poweroff);
+	/*ZTE ADD for BOOT_MODE end*/
+
 	/* Register the PON configurations */
 	rc = qpnp_pon_config_init(pon, pdev);
 	if (rc)
@@ -2306,7 +2540,11 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		sys_reset_dev = pon;
 
 	qpnp_pon_debugfs_init(pon);
-
+/***********hww add power reason node start**************/
+#ifdef CONFIG_ENABLE_POWER_REASON_NODE
+	zte_power_reason_debug_func();
+#endif
+/***********hww add power reason node end**************/
 	return 0;
 }
 

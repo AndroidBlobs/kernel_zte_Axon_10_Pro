@@ -900,4 +900,33 @@ config INPUT_HISI_POWERKEY
 	  To compile this driver as a module, choose M here: the
 	  module will be called hisi_powerkey.
 
+config SENSORS_HALL_AH1898
+	tristate "HALL sensor for ah1898"
+	default n
+	help
+	  This driver provides support for the AH1898 HALL sensor
+	  The sensor report a gpio interrupt for input system. The sensor is for
+	  /sys/bus/platform/ah1898.
+
+config INPUT_SX9325
+	tristate "SX9325_SAR_sensor"
+	depends on I2C
+	default n
+	help
+	  Say Y to enable the SAR detection application, if N here not to use the
+	  this SAR sensor
+
+config INPUT_SX9325_1
+	tristate "SX9325_1_SAR_sensor"
+	depends on I2C
+	default n
+	help
+	  Say Y to enable the SAR detection application, if N here not to use the
+	  this SAR sensor
+
 endif
+
+config ENABLE_POWER_REASON_NODE
+	bool "Power reason node"
+	help
+	  Power reason node.
