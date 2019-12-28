@@ -478,6 +478,42 @@ out:
 	return ret;
 }
 
+unsigned long get_wchan_nr(struct task_struct *p, int nr)
+{
+	struct stackframe frame;
+	unsigned long stack_page, ret = 0;
+	int count = 0;
+
+	if (!p || p == current || p->state == TASK_RUNNING)
+		return 0;
+
+	stack_page = (unsigned long)try_get_task_stack(p);
+	if (!stack_page)
+		return 0;
+
+	frame.fp = thread_saved_fp(p);
+	frame.pc = thread_saved_pc(p);
+#ifdef CONFIG_FUNCTION_GRAPH_TRACER
+	frame.graph = p->curr_ret_stack;
+#endif
+	do {
+		if (unwind_frame(p, &frame))
+			goto out;
+		if (!in_sched_functions(frame.pc)) {
+			ret = frame.pc;
+			if (nr-- <= 0) {
+				goto out;
+			}
+		}
+	} while (count++ < 16);
+
+out:
+	put_task_stack(p);
+	return ret;
+}
+
+
+
 unsigned long arch_align_stack(unsigned long sp)
 {
 	if (!(current->personality & ADDR_NO_RANDOMIZE) && randomize_va_space)
