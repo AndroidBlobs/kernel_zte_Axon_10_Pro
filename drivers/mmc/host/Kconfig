@@ -923,3 +923,9 @@ config MMC_SDHCI_XENON
 	  This selects Marvell Xenon eMMC/SD/SDIO SDHCI.
 	  If you have a controller with this interface, say Y or M here.
 	  If unsure, say N.
+
+config UFS
+	bool "MMC Or UFS support"
+	default y
+	help
+	  Select Y to enable ufs support.

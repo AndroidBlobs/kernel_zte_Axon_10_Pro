@@ -2087,6 +2087,18 @@ struct sdhci_msm_pltfm_data *sdhci_msm_populate_pdata(struct device *dev,
 		dev_err(dev, "failed parsing vdd data\n");
 		goto out;
 	}
+#ifdef ZTE_FEATURE_SD_VDD_ALWAYSON
+#ifdef CONFIG_UFS
+	if (!strcmp(mmc_hostname(msm_host->mmc), "mmc0")) {
+#else
+	if (!strcmp(mmc_hostname(msm_host->mmc), "mmc1")) {
+#endif
+		pdata->vreg_data->vdd_data->is_always_on = true;
+	}
+	pr_info("%s,vdd_data->is_always_on=%d\n", mmc_hostname(msm_host->mmc),
+		pdata->vreg_data->vdd_data->is_always_on);
+#endif
+
 	if (sdhci_msm_dt_parse_vreg_info(dev,
 					 &pdata->vreg_data->vdd_io_data,
 					 "vdd-io")) {
