@@ -43,10 +43,11 @@ static int try_to_freeze_tasks(bool user_only)
 #ifdef CONFIG_PM_SLEEP
 	char suspend_abort[MAX_SUSPEND_ABORT_LEN];
 #endif
-
+	unsigned long freezing_too_long;
 	start = ktime_get_boottime();
 
 	end_time = jiffies + msecs_to_jiffies(freeze_timeout_msecs);
+	freezing_too_long = jiffies + msecs_to_jiffies(10000);
 
 	if (!user_only)
 		freeze_workqueues_begin();
@@ -99,6 +100,23 @@ static int try_to_freeze_tasks(bool user_only)
 		pr_cont("\n");
 		pr_err("Freezing of tasks aborted after %d.%03d seconds",
 		       elapsed_msecs / 1000, elapsed_msecs % 1000);
+		if (todo && time_after(jiffies, freezing_too_long)) {
+			pr_err("Freezing of tasks failed after %d.%03d seconds"
+			       " (%d tasks refusing to freeze, wq_busy=%d):\n",
+			       elapsed_msecs / 1000, elapsed_msecs % 1000,
+			       todo - wq_busy, wq_busy);
+
+			if (wq_busy)
+				show_workqueue_state();
+
+			read_lock(&tasklist_lock);
+			for_each_process_thread(g, p) {
+				if (p != current && !freezer_should_skip(p)
+				    && freezing(p) && !frozen(p))
+					sched_show_task(p);
+			}
+			read_unlock(&tasklist_lock);
+		}
 	} else if (todo) {
 		pr_cont("\n");
 		pr_err("Freezing of tasks failed after %d.%03d seconds"

@@ -77,6 +77,7 @@ static int notifier_call_chain(struct notifier_block **nl,
 {
 	int ret = NOTIFY_DONE;
 	struct notifier_block *nb, *next_nb;
+	unsigned long startjiffies;
 
 	nb = rcu_dereference_raw(*nl);
 
@@ -90,7 +91,12 @@ static int notifier_call_chain(struct notifier_block **nl,
 			continue;
 		}
 #endif
+		startjiffies = jiffies;
 		ret = nb->notifier_call(nb, val, v);
+		if (time_after(jiffies, startjiffies + HZ/10)) {
+			pr_info("Warning: notifier call(%pf) spend %ld msecs\n",
+				nb->notifier_call, (jiffies - startjiffies)*1000/HZ);
+		}
 
 		if (nr_calls)
 			(*nr_calls)++;
